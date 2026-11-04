@@ -181,5 +181,8 @@ class Settings(BaseSettings):
     # Timezone (loaded from .env)
     TIMEZONE: str = Field(default_factory=lambda: os.getenv("TIMEZONE", "Asia/Kolkata"))
 
+    # Auto-seed on startup (loaded from .env)
+    AUTO_SEED: bool = Field(default_factory=lambda: os.getenv("AUTO_SEED", "true").strip().lower() in ("true", "1", "yes"))
+
 
 settings = Settings()

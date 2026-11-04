@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
-from app.db.session import async_session_factory
+from app.db import session as db_session
 from app.modules.appointments.models import Appointment
 from app.modules.billing.models import Invoice, InvoiceCharge, Payment
 from app.modules.catalog.models import BodyRegionTemplate, ChargeCatalogItem
@@ -135,7 +135,7 @@ async def seed_database(session: AsyncSession | None = None, clean: bool = False
     if session is not None:
         await _seed_with_session(session, clean=clean)
     else:
-        async with async_session_factory() as s:
+        async with db_session.async_session_factory() as s:
             await _seed_with_session(s, clean=clean)
 
 
@@ -250,19 +250,28 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
 
     # 3. Fee Settings
     print("Seeding fee settings...")
-    fee_skin = FeeSetting(department="skin", amount=70000, currency="INR")
-    fee_ortho = FeeSetting(department="orthopaedics", amount=90000, currency="INR")
-    session.add_all([fee_skin, fee_ortho])
+    res_fees = await session.execute(select(FeeSetting))
+    existing_fees = {f.department: f for f in res_fees.scalars().all()}
+    if "skin" not in existing_fees:
+        session.add(FeeSetting(department="skin", amount=70000, currency="INR"))
+    if "orthopaedics" not in existing_fees:
+        session.add(FeeSetting(department="orthopaedics", amount=90000, currency="INR"))
 
     # 4. Charge Catalog
     print("Seeding charge catalog...")
+    res_cat = await session.execute(select(ChargeCatalogItem.display_id))
+    existing_cat = set(res_cat.scalars().all())
     for item in CATALOG_ITEMS:
-        session.add(ChargeCatalogItem(**item))
+        if item["display_id"] not in existing_cat:
+            session.add(ChargeCatalogItem(**item))
 
     # 5. Body Region Templates
     print("Seeding body region templates...")
+    res_tmpl = await session.execute(select(BodyRegionTemplate.region))
+    existing_tmpl = set(res_tmpl.scalars().all())
     for tmpl in BODY_REGION_TEMPLATES:
-        session.add(BodyRegionTemplate(**tmpl))
+        if tmpl["region"] not in existing_tmpl:
+            session.add(BodyRegionTemplate(**tmpl))
     await session.flush()
 
     # 6. Patients
@@ -278,11 +287,13 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
         {"display_id": "PT-2048", "full_name": "Rohan Desai", "date_of_birth": "1984-01-12", "gender": "Male", "phone": "+91 98600 39941", "address": "7 Orchard Road, Pune", "registered_at": at(-2, 9)},
     ]
 
-    patient_map: dict[str, Patient] = {}
+    res_pts = await session.execute(select(Patient))
+    patient_map: dict[str, Patient] = {p.display_id: p for p in res_pts.scalars().all()}
     for p_data in patients_data:
-        p = Patient(**p_data)
-        session.add(p)
-        patient_map[p_data["display_id"]] = p
+        if p_data["display_id"] not in patient_map:
+            p = Patient(**p_data)
+            session.add(p)
+            patient_map[p_data["display_id"]] = p
     await session.flush()
 
     # 7. Appointments
@@ -299,214 +310,241 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
         {"display_id": "APT-7209", "patient_display": "PT-2041", "dept": "skin", "doc": doc_skin, "starts_at": at(2, 10), "visit_type": "Follow-up", "note": "Future follow-up demo", "status": "Scheduled"},
     ]
 
-    appt_map: dict[str, Appointment] = {}
+    res_apts = await session.execute(select(Appointment))
+    appt_map: dict[str, Appointment] = {a.display_id: a for a in res_apts.scalars().all()}
     for a in appts_data:
-        appt = Appointment(
-            display_id=a["display_id"],
-            patient_id=patient_map[a["patient_display"]].id,
-            department=a["dept"],
-            doctor_id=a["doc"].id,
-            starts_at=a["starts_at"],
-            visit_type=a["visit_type"],
-            note=a["note"],
-            status=a["status"],
-            created_by=reception_user.id,
-        )
-        session.add(appt)
-        appt_map[a["display_id"]] = appt
+        if a["display_id"] not in appt_map and a["patient_display"] in patient_map:
+            appt = Appointment(
+                display_id=a["display_id"],
+                patient_id=patient_map[a["patient_display"]].id,
+                department=a["dept"],
+                doctor_id=a["doc"].id,
+                starts_at=a["starts_at"],
+                visit_type=a["visit_type"],
+                note=a["note"],
+                status=a["status"],
+                created_by=reception_user.id,
+            )
+            session.add(appt)
+            appt_map[a["display_id"]] = appt
     await session.flush()
 
     # 8. Visits & Vitals
     print("Seeding visits & vitals...")
     visits_data: list[dict[str, Any]] = [
-        {"display_id": "VIS-8801", "patient_display": "PT-2041", "dept": "skin", "doc": doc_skin, "appt": appt_map["APT-7201"], "started_at": at(0, 9, 12), "visit_type": "Follow-up"},
-        {"display_id": "VIS-8802", "patient_display": "PT-2042", "dept": "orthopaedics", "doc": doc_ortho, "appt": appt_map["APT-7202"], "started_at": at(-12, 11), "visit_type": "Follow-up"},
+        {"display_id": "VIS-8801", "patient_display": "PT-2041", "dept": "skin", "doc": doc_skin, "appt": appt_map.get("APT-7201"), "started_at": at(0, 9, 12), "visit_type": "Follow-up"},
+        {"display_id": "VIS-8802", "patient_display": "PT-2042", "dept": "orthopaedics", "doc": doc_ortho, "appt": appt_map.get("APT-7202"), "started_at": at(-12, 11), "visit_type": "Follow-up"},
         {"display_id": "VIS-8803", "patient_display": "PT-2043", "dept": "skin", "doc": doc_skin, "appt": None, "started_at": at(-6, 9), "visit_type": "New"},
-        {"display_id": "VIS-8804", "patient_display": "PT-2044", "dept": "orthopaedics", "doc": doc_ortho, "appt": appt_map["APT-7204"], "started_at": at(0, 9, 25), "visit_type": "Follow-up"},
+        {"display_id": "VIS-8804", "patient_display": "PT-2044", "dept": "orthopaedics", "doc": doc_ortho, "appt": appt_map.get("APT-7204"), "started_at": at(0, 9, 25), "visit_type": "Follow-up"},
     ]
 
-    visit_map: dict[str, Visit] = {}
+    res_vis = await session.execute(select(Visit))
+    visit_map: dict[str, Visit] = {v.display_id: v for v in res_vis.scalars().all()}
     for v in visits_data:
-        vis = Visit(
-            display_id=v["display_id"],
-            patient_id=patient_map[v["patient_display"]].id,
-            department=v["dept"],
-            doctor_id=v["doc"].id,
-            appointment_id=v["appt"].id if v["appt"] else None,
-            visit_type=v["visit_type"],
-            started_at=v["started_at"],
-        )
-        session.add(vis)
-        visit_map[v["display_id"]] = vis
+        if v["display_id"] not in visit_map and v["patient_display"] in patient_map:
+            vis = Visit(
+                display_id=v["display_id"],
+                patient_id=patient_map[v["patient_display"]].id,
+                department=v["dept"],
+                doctor_id=v["doc"].id,
+                appointment_id=v["appt"].id if v.get("appt") else None,
+                visit_type=v["visit_type"],
+                started_at=v["started_at"],
+            )
+            session.add(vis)
+            visit_map[v["display_id"]] = vis
     await session.flush()
 
-    # Add vitals for each visit
+    # Add vitals for each visit if not present
+    res_vitals = await session.execute(select(VitalsRecord.visit_id))
+    existing_vitals_visits = set(res_vitals.scalars().all())
     for vis in visit_map.values():
-        session.add(VitalsRecord(
-            visit_id=vis.id,
-            blood_pressure=DEFAULT_VITALS["blood_pressure"],
-            pulse=DEFAULT_VITALS["pulse"],
-            temperature=DEFAULT_VITALS["temperature"],
-            height=DEFAULT_VITALS["height"],
-            weight=DEFAULT_VITALS["weight"],
-            oxygen_saturation=DEFAULT_VITALS["oxygen_saturation"],
-            entered_by=reception_user.id,
-            entered_at=vis.started_at,
-        ))
+        if vis.id not in existing_vitals_visits:
+            session.add(VitalsRecord(
+                visit_id=vis.id,
+                blood_pressure=DEFAULT_VITALS["blood_pressure"],
+                pulse=DEFAULT_VITALS["pulse"],
+                temperature=DEFAULT_VITALS["temperature"],
+                height=DEFAULT_VITALS["height"],
+                weight=DEFAULT_VITALS["weight"],
+                oxygen_saturation=DEFAULT_VITALS["oxygen_saturation"],
+                entered_by=reception_user.id,
+                entered_at=vis.started_at,
+            ))
 
     # 9. Queue Entries
     print("Seeding queue entries...")
     q_entries: list[dict[str, Any]] = [
-        {"display_id": "Q-5101", "token": "S-018", "vis": visit_map["VIS-8801"], "patient_display": "PT-2041", "dept": "skin", "doc": doc_skin, "arrival_at": at(0, 9, 12), "status": "Waiting", "visit_type": "Follow-up", "note": "Review skin-care routine"},
-        {"display_id": "Q-5102", "token": "O-011", "vis": visit_map["VIS-8804"], "patient_display": "PT-2044", "dept": "orthopaedics", "doc": doc_ortho, "arrival_at": at(0, 9, 25), "status": "Consulting", "visit_type": "Follow-up", "note": "Shoulder symptoms"},
-        {"display_id": "Q-5103", "token": "S-019", "vis": visit_map["VIS-8803"], "patient_display": "PT-2045", "dept": "skin", "doc": doc_skin, "arrival_at": at(0, 9, 41), "status": "Waiting", "visit_type": "Walk-in", "note": "Itching; clinician review"},
+        {"display_id": "Q-5101", "token": "S-018", "vis_key": "VIS-8801", "patient_display": "PT-2041", "dept": "skin", "doc": doc_skin, "arrival_at": at(0, 9, 12), "status": "Waiting", "visit_type": "Follow-up", "note": "Review skin-care routine"},
+        {"display_id": "Q-5102", "token": "O-011", "vis_key": "VIS-8804", "patient_display": "PT-2044", "dept": "orthopaedics", "doc": doc_ortho, "arrival_at": at(0, 9, 25), "status": "Consulting", "visit_type": "Follow-up", "note": "Shoulder symptoms"},
+        {"display_id": "Q-5103", "token": "S-019", "vis_key": "VIS-8803", "patient_display": "PT-2045", "dept": "skin", "doc": doc_skin, "arrival_at": at(0, 9, 41), "status": "Waiting", "visit_type": "Walk-in", "note": "Itching; clinician review"},
     ]
 
+    res_q = await session.execute(select(QueueEntry.display_id))
+    existing_q_ids = set(res_q.scalars().all())
     for q in q_entries:
-        session.add(QueueEntry(
-            display_id=q["display_id"],
-            token=q["token"],
-            visit_id=q["vis"].id,
-            patient_id=patient_map[q["patient_display"]].id,
-            department=q["dept"],
-            doctor_id=q["doc"].id,
-            arrival_at=q["arrival_at"],
-            status=q["status"],
-            visit_type=q["visit_type"],
-            note=q["note"],
-        ))
+        if q["display_id"] not in existing_q_ids and q["patient_display"] in patient_map and q["vis_key"] in visit_map:
+            session.add(QueueEntry(
+                display_id=q["display_id"],
+                token=q["token"],
+                visit_id=visit_map[q["vis_key"]].id,
+                patient_id=patient_map[q["patient_display"]].id,
+                department=q["dept"],
+                doctor_id=q["doc"].id,
+                arrival_at=q["arrival_at"],
+                status=q["status"],
+                visit_type=q["visit_type"],
+                note=q["note"],
+            ))
 
     # 10. Consultations & Prescriptions
     print("Seeding consultations...")
-    c1 = Consultation(
-        id=visit_map["VIS-8801"].id,
-        visit_id=visit_map["VIS-8801"].id,
-        patient_id=patient_map["PT-2041"].id,
-        department="skin",
-        symptoms="Intermittent dryness on both cheeks for three weeks.",
-        medical_history="No significant history reported.",
-        allergies="No known drug allergies.",
-        examination="Mild erythema; skin intact.",
-        assessment="Dryness with mild irritation.",
-        diagnosis="Irritant contact dermatitis",
-        treatment_plan="Gentle skin-care routine; review in four weeks.",
-        follow_up_date=iso_day(9),
-        status="Finalized",
-        finalized_at=at(0, 9, 30),
-        finalized_by=skin_user.id,
-    )
-    session.add(c1)
-    session.add(PrescriptionItem(
-        display_id="RX-1",
-        consultation_id=c1.id,
-        medicine_name="Moisturizer (doctor-entered)",
-        strength="—",
-        dosage="Apply a thin layer",
-        route="Topical",
-        frequency="As directed",
-        duration="To be confirmed",
-        instructions="Use only as directed by the clinician.",
-        sort_order=0,
-    ))
+    res_cons = await session.execute(select(Consultation.visit_id))
+    existing_cons_visits = set(res_cons.scalars().all())
 
-    c2 = Consultation(
-        id=visit_map["VIS-8802"].id,
-        visit_id=visit_map["VIS-8802"].id,
-        patient_id=patient_map["PT-2042"].id,
-        department="orthopaedics",
-        symptoms="Right knee discomfort when using stairs.",
-        medical_history="Occasional recreational walking.",
-        allergies="No known allergies reported.",
-        examination="Range of motion recorded for clinician review.",
-        assessment="Symptoms require clinical assessment.",
-        diagnosis="Pending clinician entry",
-        treatment_plan="Pending clinician entry.",
-        pain_location="Anterior right knee",
-        side="Right",
-        status="Finalized",
-        finalized_at=at(-12, 11, 30),
-        finalized_by=ortho_user.id,
-    )
-    session.add(c2)
+    if "VIS-8801" in visit_map and visit_map["VIS-8801"].id not in existing_cons_visits and "PT-2041" in patient_map:
+        c1 = Consultation(
+            id=visit_map["VIS-8801"].id,
+            visit_id=visit_map["VIS-8801"].id,
+            patient_id=patient_map["PT-2041"].id,
+            department="skin",
+            symptoms="Intermittent dryness on both cheeks for three weeks.",
+            medical_history="No significant history reported.",
+            allergies="No known drug allergies.",
+            examination="Mild erythema; skin intact.",
+            assessment="Dryness with mild irritation.",
+            diagnosis="Irritant contact dermatitis",
+            treatment_plan="Gentle skin-care routine; review in four weeks.",
+            follow_up_date=iso_day(9),
+            status="Finalized",
+            finalized_at=at(0, 9, 30),
+            finalized_by=skin_user.id,
+        )
+        session.add(c1)
+        session.add(PrescriptionItem(
+            display_id="RX-1",
+            consultation_id=c1.id,
+            medicine_name="Moisturizer (doctor-entered)",
+            strength="—",
+            dosage="Apply a thin layer",
+            route="Topical",
+            frequency="As directed",
+            duration="To be confirmed",
+            instructions="Use only as directed by the clinician.",
+            sort_order=0,
+        ))
 
-    c3 = Consultation(
-        id=visit_map["VIS-8803"].id,
-        visit_id=visit_map["VIS-8803"].id,
-        patient_id=patient_map["PT-2043"].id,
-        department="skin",
-        symptoms="Occasional scalp itching; patient reports recent product change.",
-        medical_history="No significant history reported.",
-        allergies="Seasonal pollen sensitivity reported.",
-        examination="No open lesions noted in demo record.",
-        diagnosis="",
-        status="Draft",
-    )
-    session.add(c3)
+    if "VIS-8802" in visit_map and visit_map["VIS-8802"].id not in existing_cons_visits and "PT-2042" in patient_map:
+        c2 = Consultation(
+            id=visit_map["VIS-8802"].id,
+            visit_id=visit_map["VIS-8802"].id,
+            patient_id=patient_map["PT-2042"].id,
+            department="orthopaedics",
+            symptoms="Right knee discomfort when using stairs.",
+            medical_history="Occasional recreational walking.",
+            allergies="No known allergies reported.",
+            examination="Range of motion recorded for clinician review.",
+            assessment="Symptoms require clinical assessment.",
+            diagnosis="Pending clinician entry",
+            treatment_plan="Pending clinician entry.",
+            pain_location="Anterior right knee",
+            side="Right",
+            status="Finalized",
+            finalized_at=at(-12, 11, 30),
+            finalized_by=ortho_user.id,
+        )
+        session.add(c2)
 
-    c4 = Consultation(
-        id=visit_map["VIS-8804"].id,
-        visit_id=visit_map["VIS-8804"].id,
-        patient_id=patient_map["PT-2044"].id,
-        department="orthopaedics",
-        symptoms="Left shoulder stiffness after activity.",
-        medical_history="No significant history reported.",
-        allergies="Not recorded.",
-        pain_location="Left shoulder",
-        side="Left",
-        status="Draft",
-    )
-    session.add(c4)
+    if "VIS-8803" in visit_map and visit_map["VIS-8803"].id not in existing_cons_visits and "PT-2043" in patient_map:
+        c3 = Consultation(
+            id=visit_map["VIS-8803"].id,
+            visit_id=visit_map["VIS-8803"].id,
+            patient_id=patient_map["PT-2043"].id,
+            department="skin",
+            symptoms="Occasional scalp itching; patient reports recent product change.",
+            medical_history="No significant history reported.",
+            allergies="Seasonal pollen sensitivity reported.",
+            examination="No open lesions noted in demo record.",
+            diagnosis="",
+            status="Draft",
+        )
+        session.add(c3)
+
+    if "VIS-8804" in visit_map and visit_map["VIS-8804"].id not in existing_cons_visits and "PT-2044" in patient_map:
+        c4 = Consultation(
+            id=visit_map["VIS-8804"].id,
+            visit_id=visit_map["VIS-8804"].id,
+            patient_id=patient_map["PT-2044"].id,
+            department="orthopaedics",
+            symptoms="Left shoulder stiffness after activity.",
+            medical_history="No significant history reported.",
+            allergies="Not recorded.",
+            pain_location="Left shoulder",
+            side="Left",
+            status="Draft",
+        )
+        session.add(c4)
 
     # 11. Invoices, Charges, Payments
     print("Seeding invoices, charges, and payments...")
-    inv1 = Invoice(
-        display_id="INV-3401",
-        patient_id=patient_map["PT-2041"].id,
-        visit_id=visit_map["VIS-8801"].id,
-        department="skin",
-        visit_label="Skin consultation · APT-7201",
-        consultation_fee=70000,
-        created_at=at(0, 9, 30),
-    )
-    inv2 = Invoice(
-        display_id="INV-3402",
-        patient_id=patient_map["PT-2042"].id,
-        visit_id=visit_map["VIS-8802"].id,
-        department="orthopaedics",
-        visit_label="Orthopaedics follow-up · APT-7202",
-        consultation_fee=90000,
-        created_at=at(0, 10),
-    )
-    inv3 = Invoice(
-        display_id="INV-3403",
-        patient_id=patient_map["PT-2044"].id,
-        visit_id=visit_map["VIS-8804"].id,
-        department="orthopaedics",
-        visit_label="Orthopaedics consultation · APT-7204",
-        consultation_fee=90000,
-        created_at=at(0, 11),
-    )
-    session.add_all([inv1, inv2, inv3])
-    await session.flush()
+    res_inv = await session.execute(select(Invoice.display_id))
+    existing_inv_ids = set(res_inv.scalars().all())
 
-    # Charges & Payments on Invoice 2
-    session.add(InvoiceCharge(
-        display_id="CH-10",
-        invoice_id=inv2.id,
-        description="Support assessment",
-        amount=35000,  # ₹350
-        added_by="Dr. Sundarprakash",
-        created_at=at(0, 8),
-    ))
-    session.add(Payment(
-        display_id="PAY-11",
-        invoice_id=inv2.id,
-        amount=50000,  # ₹500
-        method="UPI",
-        transaction_reference="DEMO-UPI-4418",
-        paid_at=at(0, 8, 10),
-        recorded_by=reception_user.id,
-    ))
+    if "INV-3401" not in existing_inv_ids and "PT-2041" in patient_map and "VIS-8801" in visit_map:
+        inv1 = Invoice(
+            display_id="INV-3401",
+            patient_id=patient_map["PT-2041"].id,
+            visit_id=visit_map["VIS-8801"].id,
+            department="skin",
+            visit_label="Skin consultation · APT-7201",
+            consultation_fee=70000,
+            created_at=at(0, 9, 30),
+        )
+        session.add(inv1)
+
+    if "INV-3402" not in existing_inv_ids and "PT-2042" in patient_map and "VIS-8802" in visit_map:
+        inv2 = Invoice(
+            display_id="INV-3402",
+            patient_id=patient_map["PT-2042"].id,
+            visit_id=visit_map["VIS-8802"].id,
+            department="orthopaedics",
+            visit_label="Orthopaedics follow-up · APT-7202",
+            consultation_fee=90000,
+            created_at=at(0, 10),
+        )
+        session.add(inv2)
+        await session.flush()
+
+        # Charges & Payments on Invoice 2
+        session.add(InvoiceCharge(
+            display_id="CH-10",
+            invoice_id=inv2.id,
+            description="Support assessment",
+            amount=35000,  # ₹350
+            added_by="Dr. Sundarprakash",
+            created_at=at(0, 8),
+        ))
+        session.add(Payment(
+            display_id="PAY-11",
+            invoice_id=inv2.id,
+            amount=50000,  # ₹500
+            method="UPI",
+            transaction_reference="DEMO-UPI-4418",
+            paid_at=at(0, 8, 10),
+            recorded_by=reception_user.id,
+        ))
+
+    if "INV-3403" not in existing_inv_ids and "PT-2044" in patient_map and "VIS-8804" in visit_map:
+        inv3 = Invoice(
+            display_id="INV-3403",
+            patient_id=patient_map["PT-2044"].id,
+            visit_id=visit_map["VIS-8804"].id,
+            department="orthopaedics",
+            visit_label="Orthopaedics consultation · APT-7204",
+            consultation_fee=90000,
+            created_at=at(0, 11),
+        )
+        session.add(inv3)
 
     # 12. Follow-ups
     print("Seeding follow-ups...")
@@ -517,17 +555,21 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
         {"display_id": "FU-2104", "patient_display": "PT-2046", "dept": "orthopaedics", "doc": doc_ortho, "date": iso_day(14), "status": "Upcoming", "reminder_status": "Not sent", "note": "Review current symptoms"},
     ]
 
+    res_fu = await session.execute(select(FollowUp.display_id))
+    existing_fu_ids = set(res_fu.scalars().all())
+
     for fu in fu_data:
-        session.add(FollowUp(
-            display_id=fu["display_id"],
-            patient_id=patient_map[fu["patient_display"]].id,
-            department=fu["dept"],
-            doctor_id=fu["doc"].id,
-            date=fu["date"],
-            status=fu["status"],
-            reminder_status=fu["reminder_status"],
-            note=fu["note"],
-        ))
+        if fu["display_id"] not in existing_fu_ids and fu["patient_display"] in patient_map:
+            session.add(FollowUp(
+                display_id=fu["display_id"],
+                patient_id=patient_map[fu["patient_display"]].id,
+                department=fu["dept"],
+                doctor_id=fu["doc"].id,
+                date=fu["date"],
+                status=fu["status"],
+                reminder_status=fu["reminder_status"],
+                note=fu["note"],
+            ))
 
     await session.commit()
     print("[SUCCESS] Database seeding successfully finished!")
