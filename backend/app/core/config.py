@@ -66,6 +66,15 @@ for p in possible_env_files:
 env_file_setting: tuple[str, ...] = tuple(valid_env_files) if valid_env_files else (str(BACKEND_DIR / ".env"),)
 
 
+DEFAULT_CORS_ORIGINS: list[str] = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://tosh-drev-henna.vercel.app",
+]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=env_file_setting,
@@ -85,36 +94,42 @@ class Settings(BaseSettings):
     PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "4000")))
 
     # CORS Origins (loaded from .env)
-    CORS_ORIGINS: list[str] = Field(default_factory=list)
+    CORS_ORIGINS: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Any) -> list[str]:
         if not v:
             v = os.getenv("CORS_ORIGINS", "")
+        origins: list[str] = []
         if isinstance(v, str):
             v = v.strip()
-            if not v:
-                return []
-            if v.startswith("[") and v.endswith("]"):
-                try:
-                    parsed = json.loads(v)
-                    if isinstance(parsed, list):
-                        return [str(item).strip() for item in parsed]
-                except Exception:
-                    # Handle single-quoted list format e.g. "['http://localhost:5173', ...]"
-                    inner = v[1:-1].strip()
-                    if inner:
-                        return [
-                            item.strip().strip("'\"")
-                            for item in inner.split(",")
-                            if item.strip().strip("'\"")
-                        ]
-                    return []
-            return [item.strip() for item in v.split(",") if item.strip()]
+            if v:
+                if v.startswith("[") and v.endswith("]"):
+                    try:
+                        parsed = json.loads(v)
+                        if isinstance(parsed, list):
+                            origins = [str(item).strip() for item in parsed]
+                    except Exception:
+                        # Handle single-quoted list format e.g. "['http://localhost:5173', ...]"
+                        inner = v[1:-1].strip()
+                        if inner:
+                            origins = [
+                                item.strip().strip("'\"")
+                                for item in inner.split(",")
+                                if item.strip().strip("'\"")
+                            ]
+                else:
+                    origins = [item.strip() for item in v.split(",") if item.strip()]
         elif isinstance(v, (list, tuple)):
-            return [str(item) for item in v]
-        return v or []
+            origins = [str(item).strip() for item in v if str(item).strip()]
+
+        if not origins:
+            return list(DEFAULT_CORS_ORIGINS)
+
+        if "https://tosh-drev-henna.vercel.app" not in origins:
+            origins.append("https://tosh-drev-henna.vercel.app")
+        return origins
 
     # Database URLs (loaded directly from .env without hardcoded defaults)
     DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())

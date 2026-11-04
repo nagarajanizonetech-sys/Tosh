@@ -55,7 +55,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:[0-9]+)?$",
+    allow_origin_regex=r"^https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,6 +86,7 @@ def _attach_cors_headers(request: Request, response: Response) -> Response:
             response.headers["access-control-allow-headers"] = "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
         if "access-control-allow-methods" not in response.headers:
             response.headers["access-control-allow-methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+        response.headers["access-control-max-age"] = "86400"
     else:
         # Crucial for iframe/embed/object subresource requests where Origin header is omitted by browser
         response.headers["access-control-allow-origin"] = "*"
@@ -93,6 +94,7 @@ def _attach_cors_headers(request: Request, response: Response) -> Response:
             response.headers["access-control-allow-methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
         if "access-control-allow-headers" not in response.headers:
             response.headers["access-control-allow-headers"] = "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
+        response.headers["access-control-max-age"] = "86400"
     return response
 
 
@@ -116,7 +118,7 @@ async def request_size_limit_middleware(request: Request, call_next):
 @app.middleware("http")
 async def security_and_request_id_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
-        res = await call_next(request)
+        res = Response(status_code=status.HTTP_200_OK)
         return _attach_cors_headers(request, res)
 
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
@@ -133,7 +135,7 @@ async def security_and_request_id_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     if "/documents/" in request.url.path or request.url.path.startswith("/api/v1/documents"):
         allowed_origins = " ".join(settings.CORS_ORIGINS) if settings.CORS_ORIGINS else "'self'"
-        response.headers["Content-Security-Policy"] = f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000 http://127.0.0.1:5173 {allowed_origins}"
+        response.headers["Content-Security-Policy"] = f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000 http://127.0.0.1:5173 https://*.vercel.app https://tosh-drev-henna.vercel.app {allowed_origins}"
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     else:
         response.headers["X-Frame-Options"] = "DENY"
