@@ -1,4 +1,4 @@
-import { DATA_MODE } from '../repositories/mode';
+import { DATA_MODE, API_BASE_URL } from '../repositories/mode';
 
 export type WsStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -31,9 +31,22 @@ class WebSocketClient {
       return 'ws://127.0.0.1:4000/api/v1/ws';
     }
 
+    if (API_BASE_URL && (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://'))) {
+      const wsProto = API_BASE_URL.startsWith('https://') ? 'wss://' : 'ws://';
+      const cleanBase = API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      if (cleanBase.endsWith('/ws')) {
+        return `${wsProto}${cleanBase}`;
+      }
+      return `${wsProto}${cleanBase}/ws`;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host; // e.g. "localhost:3000" or "192.168.29.38:3000"
-    return `${protocol}//${host}/api/v1/ws`;
+    const relativeBase = (API_BASE_URL || '/api/v1').replace(/\/+$/, '');
+    if (relativeBase.endsWith('/ws')) {
+      return `${protocol}//${host}${relativeBase}`;
+    }
+    return `${protocol}//${host}${relativeBase}/ws`;
   }
 
   public connect(): void {
