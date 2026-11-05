@@ -28,7 +28,7 @@ class WebSocketClient {
       return customWs.trim();
     }
     if (typeof window === 'undefined') {
-      return 'ws://127.0.0.1:4000/api/v1/ws';
+      return 'ws://127.0.0.1:8000/api/v1/ws';
     }
 
     if (API_BASE_URL && (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://'))) {

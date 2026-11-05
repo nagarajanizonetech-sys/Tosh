@@ -15,7 +15,7 @@ Production-grade Hospital Management System for Tosh Clinic, specialized for a t
                                     │ Credentials: include (httpOnly cookie)
                                     ▼
                       ┌────────────────────────────┐
-                      │    FastAPI Backend (4000)  │
+                      │    FastAPI Backend (8000)  │
                       └─────────────┬──────────────┘
                                     │
          ┌──────────────────────────┼─────────────────────────┐
@@ -75,7 +75,7 @@ Production-grade Hospital Management System for Tosh Clinic, specialized for a t
 |---|---|---|
 | `ENVIRONMENT` | Runtime environment (`development` / `production`) | `development` |
 | `DEBUG` | Enable debug logging | `True` |
-| `HOST` / `PORT` | Listening host and port | `0.0.0.0` / `4000` |
+| `HOST` / `PORT` | Listening host and port | `0.0.0.0` / `8000` |
 | `DATABASE_URL` | Async PostgreSQL connection string | `postgresql+asyncpg://...` |
 | `DATABASE_SYNC_URL` | Sync PostgreSQL connection string for Alembic | `postgresql://...` |
 | `JWT_SECRET_KEY` | Secret key for JWT signing & document HMAC signatures | (required) |
@@ -90,7 +90,7 @@ Production-grade Hospital Management System for Tosh Clinic, specialized for a t
 | Variable | Description | Default |
 |---|---|---|
 | `VITE_DATA_MODE` | Data layer provider (`api` or `mock`) | `api` |
-| `VITE_API_BASE_URL` | Backend API base URL | `http://localhost:4000/api/v1` |
+| `VITE_API_BASE_URL` | Backend API base URL | `http://localhost:8000/api/v1` |
 
 ---
 
@@ -115,7 +115,7 @@ alembic upgrade head
 python -m app.scripts.seed
 
 # Start backend API server
-uvicorn app.main:app --host 127.0.0.1 --port 4000 --reload
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### 2. Frontend Setup
@@ -124,7 +124,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 4000 --reload
 cd frontend
 npm install
 
-# Set VITE_DATA_MODE=api and VITE_API_BASE_URL=http://localhost:4000/api/v1 in frontend/.env
+# Set VITE_DATA_MODE=api and VITE_API_BASE_URL=http://localhost:8000/api/v1 in frontend/.env
 npm run dev
 ```
 

@@ -37,7 +37,7 @@ python -m app.scripts.seed
 
 ### 5. Start Development Server
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Running with Docker Compose
@@ -45,6 +45,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload
 docker compose up -d
 ```
 Services started:
-- `api`: FastAPI server on `http://localhost:4000` (Swagger UI at `/docs` in non-prod)
+- `api`: FastAPI server on `http://localhost:8000` (Swagger UI at `/docs` in non-prod)
 - `postgres`: PostgreSQL 16 on `localhost:5432`
 - `minio`: S3-compatible storage on `localhost:9000` (Console on `localhost:9001`)

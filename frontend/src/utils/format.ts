@@ -101,7 +101,7 @@ export const resolveDocumentUrl = (doc?: { url?: string; dataUrl?: string } | nu
     if (doc.url.startsWith('http://') || doc.url.startsWith('https://')) return doc.url;
     const envBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
       ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/v1\/?$/, '')
-      : 'http://localhost:4000';
+      : 'http://localhost:8000';
     return `${envBase}${doc.url.startsWith('/') ? '' : '/'}${doc.url}`;
   }
   return doc.dataUrl || '';

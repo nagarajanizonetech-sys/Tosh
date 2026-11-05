@@ -91,7 +91,7 @@ class Settings(BaseSettings):
 
     # Server Host & Port (loaded from .env)
     HOST: str = Field(default_factory=lambda: os.getenv("HOST", "0.0.0.0"))
-    PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "4000")))
+    PORT: int = Field(default_factory=lambda: int(os.getenv("PORT", "8000")))
 
     # CORS Origins (loaded from .env)
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))

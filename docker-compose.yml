@@ -51,7 +51,7 @@ services:
       S3_SECRET_ACCESS_KEY: minioadmin
       S3_BUCKET_NAME: tosh-documents
     ports:
-      - "4000:4000"
+      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
