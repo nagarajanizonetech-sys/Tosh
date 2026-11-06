@@ -223,6 +223,16 @@ class Settings(BaseSettings):
             or "change-this-to-a-very-secure-random-secret-key-in-production"
         )
     )
+
+    @field_validator("JWT_SECRET_KEY", mode="before")
+    @classmethod
+    def assemble_jwt_secret_key(cls, v: Any) -> str:
+        if v and str(v).strip():
+            return str(v).strip()
+        env_val = os.getenv("JWT_SECRET_KEY", "").strip()
+        if env_val:
+            return env_val
+        return "change-this-to-a-very-secure-random-secret-key-in-production"
     JWT_ALGORITHM: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))

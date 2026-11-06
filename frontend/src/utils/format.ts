@@ -101,8 +101,10 @@ export const resolveDocumentUrl = (doc?: { url?: string; dataUrl?: string } | nu
     if (doc.url.startsWith('http://') || doc.url.startsWith('https://')) return doc.url;
     const envBase = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
       ? import.meta.env.VITE_API_BASE_URL.replace(/\/api\/v1\/?$/, '')
-      : 'http://localhost:8000';
-    return `${envBase}${doc.url.startsWith('/') ? '' : '/'}${doc.url}`;
+      : '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+    const base = envBase || origin;
+    return `${base.replace(/\/$/, '')}${doc.url.startsWith('/') ? '' : '/'}${doc.url}`;
   }
   return doc.dataUrl || '';
 };
@@ -224,7 +226,18 @@ export const fetchPdfBlobUrl = async (doc?: { url?: string; dataUrl?: string; na
 
       const buffer = await res.arrayBuffer();
       if (buffer.byteLength > 0) {
-        const pdfBlob = new Blob([buffer], { type: 'application/pdf' });
+        let bytes = new Uint8Array(buffer);
+        // Ensure PDF magic bytes start at offset 0
+        const headerLen = Math.min(1024, bytes.length);
+        let headerStr = '';
+        for (let i = 0; i < headerLen; i++) {
+          headerStr += String.fromCharCode(bytes[i]);
+        }
+        const pdfIdx = headerStr.indexOf('%PDF-');
+        if (pdfIdx > 0 && headerStr.slice(0, pdfIdx).trim() === '') {
+          bytes = bytes.slice(pdfIdx);
+        }
+        const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
         return cacheAndReturn(URL.createObjectURL(pdfBlob));
       }
     } catch {

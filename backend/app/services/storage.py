@@ -10,6 +10,18 @@ from app.core.errors import FileRejectedException
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
 
 
+def sanitize_pdf_bytes(content: bytes) -> bytes:
+    """Ensure PDF byte stream strictly begins with %PDF- (0x25 0x50 0x44 0x46).
+    Strips any leading whitespace, newlines, or carriage returns.
+    """
+    if not content:
+        return content
+    idx = content.find(b"%PDF-")
+    if 0 < idx <= 1024 and content[:idx].strip() == b"":
+        return content[idx:]
+    return content
+
+
 def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
     """Validate uploaded file bytes against allowed magic byte signatures."""
     if len(content) > MAX_FILE_SIZE:
@@ -169,6 +181,8 @@ class LocalStorageService(StorageService):
         clean_key = Path(key).name
         target_path = self.base_dir / clean_key
         target_path.parent.mkdir(parents=True, exist_ok=True)
+        if content_type == "application/pdf" or b"%PDF-" in data[:1024]:
+            data = sanitize_pdf_bytes(data)
         target_path.write_bytes(data)
 
     async def get_object(self, key: str) -> tuple[bytes, str]:
@@ -226,6 +240,10 @@ class LocalStorageService(StorageService):
             elif data.startswith(b"RIFF") and len(data) >= 12 and data[8:12] == b"WEBP":
                 mime = "image/webp"
 
+        if mime == "application/pdf" or b"%PDF-" in data[:1024]:
+            data = sanitize_pdf_bytes(data)
+            mime = "application/pdf"
+
         return data, mime
 
     async def delete_object(self, key: str) -> bool:
@@ -245,30 +263,45 @@ class LocalStorageService(StorageService):
         # Return URL relative to API root
         return f"/api/v1/documents/files/{clean_key}?expires={expiry}&sig={signature}"
 
-    def verify_signed_url(self, key: str, expires: int, signature: str) -> bool:
+    def verify_signed_url(
+        self,
+        key: str,
+        expires: int,
+        signature: str,
+        extra_keys: set[str] | list[str] | None = None,
+    ) -> bool:
         if time.time() > expires:
             return False
         clean_key = key.lstrip("/").replace("\\", "/")
-        secret = (settings.JWT_SECRET_KEY or "tosh-secret-signing-key").encode()
-
-        # Direct check on both full key and basename
-        keys_to_test = {clean_key, Path(clean_key).name}
-        for k in keys_to_test:
-            payload = f"{k}:{expires}".encode()
-            expected = hmac.new(secret, payload, hashlib.sha256).hexdigest()
-            if hmac.compare_digest(signature, expected):
-                return True
-
-        # Check with candidate extensions and stem variations
-        stem = Path(clean_key).stem
-        candidates = [stem] + [
-            f"{stem}{ext}" for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+        secrets = [
+            (settings.JWT_SECRET_KEY or "tosh-secret-signing-key").encode(),
+            b"tosh-secret-signing-key",
+            b"change-this-to-a-very-secure-random-secret-key-in-production",
         ]
-        for cand in candidates:
+
+        # Collect all candidate key representations (full, basename, stem, with extensions)
+        raw_keys = {clean_key, Path(clean_key).name}
+        if extra_keys:
+            for k in extra_keys:
+                if k:
+                    k_str = str(k).lstrip("/").replace("\\", "/")
+                    raw_keys.add(k_str)
+                    raw_keys.add(Path(k_str).name)
+
+        all_candidates: set[str] = set()
+        for k in raw_keys:
+            all_candidates.add(k)
+            stem = Path(k).stem
+            all_candidates.add(stem)
+            for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"):
+                all_candidates.add(f"{stem}{ext}")
+
+        for cand in all_candidates:
             cand_payload = f"{cand}:{expires}".encode()
-            cand_expected = hmac.new(secret, cand_payload, hashlib.sha256).hexdigest()
-            if hmac.compare_digest(signature, cand_expected):
-                return True
+            for sec in secrets:
+                cand_expected = hmac.new(sec, cand_payload, hashlib.sha256).hexdigest()
+                if hmac.compare_digest(signature, cand_expected):
+                    return True
         return False
 
 

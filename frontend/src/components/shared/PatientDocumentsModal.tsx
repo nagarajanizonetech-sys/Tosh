@@ -586,12 +586,11 @@ export function PatientDocumentsModal({
                     variant="ghost"
                     size="small"
                     onClick={() => {
-                      const win = window.open();
-                      if (win) {
-                        win.document.write(
-                          `<iframe src="${resolveDocumentUrl(preview)}" style="border:0; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`
-                        );
-                      }
+                      const targetUrl =
+                        pdfPreviewBlobUrl ||
+                        resolveInlineDocumentUrl(preview) ||
+                        resolveDocumentUrl(preview);
+                      window.open(targetUrl, '_blank', 'noopener,noreferrer');
                     }}
                     icon={<ExternalLink size={14} />}
                   >
@@ -649,9 +648,9 @@ export function PatientDocumentsModal({
                   </div>
                 )}
                 {pdfPreviewBlobUrl ? (
-                  <iframe
-                    src={pdfPreviewBlobUrl || resolveInlineDocumentUrl(preview)}
-                    title={`Preview of ${preview.name}`}
+                  <object
+                    data={pdfPreviewBlobUrl || resolveInlineDocumentUrl(preview)}
+                    type="application/pdf"
                     style={{
                       width: '100%',
                       height: '100%',
@@ -659,7 +658,19 @@ export function PatientDocumentsModal({
                       borderRadius: '6px',
                       background: '#FFFFFF',
                     }}
-                  />
+                  >
+                    <iframe
+                      src={pdfPreviewBlobUrl || resolveInlineDocumentUrl(preview)}
+                      title={`Preview of ${preview.name}`}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        borderRadius: '6px',
+                        background: '#FFFFFF',
+                      }}
+                    />
+                  </object>
                 ) : !pdfLoading && (
                   <div
                     style={{

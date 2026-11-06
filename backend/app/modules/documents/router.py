@@ -1,4 +1,5 @@
 import hashlib
+import urllib.parse
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,8 +10,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-logger = structlog.get_logger("tosh.documents")
 
 from app.core.errors import (
     AppException,
@@ -29,7 +28,14 @@ from app.modules.patients.router import find_patient_by_id
 from app.modules.users.models import User
 from app.modules.visits.models import Visit
 from app.modules.visits.router import find_visit_by_id
-from app.services.storage import LocalStorageService, get_storage_service, validate_file_magic_bytes
+from app.services.storage import (
+    LocalStorageService,
+    get_storage_service,
+    sanitize_pdf_bytes,
+    validate_file_magic_bytes,
+)
+
+logger = structlog.get_logger("tosh.documents")
 
 router = APIRouter(prefix="", tags=["Documents"])
 
@@ -495,14 +501,55 @@ async def get_document_file(
     download: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    clean_key = Path(key).name
+    raw_key = urllib.parse.unquote(key).strip()
+    clean_key = Path(raw_key).name
     storage = get_storage_service()
 
-    # 1. Authorize via signed URL or token
+    # 1. Resolve document metadata from database (supports storage_key, display_id, id, filename)
+    doc_record: Document | None = None
+    candidate_keys = {raw_key, clean_key, Path(clean_key).stem}
+    for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp"):
+        candidate_keys.add(f"{Path(clean_key).stem}{ext}")
+
+    uuid_candidates = []
+    for cand in candidate_keys:
+        try:
+            uuid_candidates.append(uuid.UUID(cand))
+        except ValueError:
+            pass
+
+    stmt = select(Document).where(
+        or_(
+            Document.storage_key.in_(candidate_keys),
+            Document.display_id.in_(candidate_keys),
+            Document.name.in_(candidate_keys),
+            *([Document.id.in_(uuid_candidates)] if uuid_candidates else []),
+        ),
+        Document.deleted_at.is_(None),
+    )
+    doc_res = await db.execute(stmt)
+    doc_record = doc_res.scalars().first()
+
+    effective_storage_key = doc_record.storage_key if doc_record else clean_key
+
+    # Collect key aliases for signed URL verification
+    extra_keys: set[str] = {clean_key, raw_key, Path(clean_key).stem}
+    if doc_record:
+        extra_keys.update(
+            {
+                doc_record.storage_key,
+                Path(doc_record.storage_key).name,
+                doc_record.display_id,
+                doc_record.name,
+                str(doc_record.id),
+            }
+        )
+
+    # 2. Authorize via signed URL or token
     authorized = False
     if expires is not None and sig is not None:
         if isinstance(storage, LocalStorageService):
-            if storage.verify_signed_url(clean_key, expires, sig):
+            if storage.verify_signed_url(clean_key, expires, sig, extra_keys=extra_keys):
                 authorized = True
         else:
             authorized = True
@@ -526,7 +573,7 @@ async def get_document_file(
     if not authorized:
         raise UnauthenticatedException("Signed URL has expired or has an invalid signature.")
 
-    # Department guard for clinicians accessing files
+    # 3. Department guard for clinicians accessing files
     caller_role = None
     auth_header = request.headers.get("Authorization") or ""
     raw_tok = token or (auth_header[7:].strip() if auth_header.startswith("Bearer ") else None)
@@ -540,41 +587,51 @@ async def get_document_file(
         except (AppException, ValueError, KeyError) as auth_err:
             logger.debug("document_role_token_decode_failed", error=str(auth_err))
 
-    if caller_role in ("skin", "orthopaedics"):
-        doc_chk_stmt = select(Document).where(
-            Document.storage_key == clean_key, Document.deleted_at.is_(None)
-        )
-        doc_chk = (await db.execute(doc_chk_stmt)).scalar_one_or_none()
-        if doc_chk:
-            doc_dept = None
-            if doc_chk.visit_id:
-                v_res = await db.execute(
-                    select(Visit.department).where(Visit.id == doc_chk.visit_id)
-                )
-                doc_dept = v_res.scalar_one_or_none()
-            elif doc_chk.uploaded_by:
-                u_res = await db.execute(select(User.role).where(User.id == doc_chk.uploaded_by))
-                doc_dept = u_res.scalar_one_or_none()
+    if caller_role in ("skin", "orthopaedics") and doc_record:
+        doc_dept = None
+        if doc_record.visit_id:
+            v_res = await db.execute(
+                select(Visit.department).where(Visit.id == doc_record.visit_id)
+            )
+            doc_dept = v_res.scalar_one_or_none()
+        elif doc_record.uploaded_by:
+            u_res = await db.execute(select(User.role).where(User.id == doc_record.uploaded_by))
+            doc_dept = u_res.scalar_one_or_none()
 
-            if doc_dept and doc_dept != caller_role:
-                raise ForbiddenException(
-                    "Clinicians cannot access documents belonging to another department."
-                )
+        if doc_dept and doc_dept != caller_role:
+            raise ForbiddenException(
+                "Clinicians cannot access documents belonging to another department."
+            )
 
-    # 2. Retrieve document bytes
+    # 4. Retrieve document bytes
     try:
-        data, content_type = await storage.get_object(clean_key)
+        data, content_type = await storage.get_object(effective_storage_key)
     except FileNotFoundError:
-        raise NotFoundException(f"Document file {clean_key} not found on server.")
+        if effective_storage_key != clean_key:
+            try:
+                data, content_type = await storage.get_object(clean_key)
+            except FileNotFoundError:
+                raise NotFoundException(f"Document file {clean_key} not found on server.")
+        else:
+            raise NotFoundException(f"Document file {clean_key} not found on server.")
     except (OSError, RuntimeError) as exc:
         logger.error("document_retrieval_failed", key=clean_key, error=str(exc))
         raise NotFoundException(f"Document file {clean_key} could not be retrieved.")
 
-    filename = clean_key
-    if (
-        not filename.endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp"))
-        and content_type == "application/pdf"
-    ):
+    # 5. Sanitize PDF byte stream if needed
+    is_pdf = (
+        content_type == "application/pdf"
+        or (doc_record is not None and doc_record.mime_type == "application/pdf")
+        or b"%PDF-" in data[:1024]
+        or clean_key.lower().endswith(".pdf")
+        or (doc_record is not None and doc_record.name.lower().endswith(".pdf"))
+    )
+    if is_pdf:
+        content_type = "application/pdf"
+        data = sanitize_pdf_bytes(data)
+
+    filename = (doc_record.name if doc_record else clean_key) or "document"
+    if is_pdf and not filename.lower().endswith(".pdf"):
         filename = f"{filename}.pdf"
 
     file_size = len(data)
@@ -584,11 +641,12 @@ async def get_document_file(
     base_headers = {
         "Content-Disposition": content_disposition,
         "Accept-Ranges": "bytes",
+        "Content-Type": content_type,
         "Cross-Origin-Resource-Policy": "cross-origin",
         "Access-Control-Expose-Headers": "Content-Disposition, Content-Length, Content-Type, Content-Range, Accept-Ranges",
     }
 
-    # 3. HTTP Range requests (RFC 7233) for streaming PDF rendering in Chrome / Edge / Firefox
+    # 6. HTTP Range requests (RFC 7233) for streaming PDF rendering in Chrome / Edge / Firefox
     range_header = request.headers.get("range") or request.headers.get("Range")
     if range_header and range_header.strip().lower().startswith("bytes="):
         range_val = range_header.strip()[6:].strip()
@@ -640,7 +698,7 @@ async def get_document_file(
         except (ValueError, IndexError):
             pass
 
-    # 4. Standard 200 OK full response
+    # 7. Standard 200 OK full response
     full_headers = {
         **base_headers,
         "Content-Length": str(file_size),
