@@ -154,13 +154,48 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_sync_url(cls, v: Any, info: Any) -> str:
         if v and str(v).strip():
-            return str(v).strip()
-        sync_env = os.getenv("DATABASE_SYNC_URL", "").strip()
-        if sync_env:
-            return sync_env
-        data = info.data if hasattr(info, "data") else {}
-        db_url = data.get("DATABASE_URL") or os.getenv("DATABASE_URL", "")
-        return str(db_url).strip()
+            sync_val = str(v).strip()
+        else:
+            sync_env = os.getenv("DATABASE_SYNC_URL", "").strip()
+            if sync_env:
+                sync_val = sync_env
+            else:
+                data = info.data if hasattr(info, "data") else {}
+                db_url = data.get("DATABASE_URL") or os.getenv("DATABASE_URL", "")
+                sync_val = str(db_url).strip()
+
+        # Normalize postgres sync driver to psycopg2
+        if sync_val.startswith("postgresql+asyncpg://"):
+            sync_val = sync_val.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        elif sync_val.startswith("postgresql://"):
+            sync_val = sync_val.replace("postgresql://", "postgresql+psycopg2://", 1)
+        elif sync_val.startswith("postgres://"):
+            sync_val = sync_val.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif sync_val.startswith("sqlite+aiosqlite://"):
+            sync_val = sync_val.replace("sqlite+aiosqlite://", "sqlite://", 1)
+
+        return sync_val
+
+    @property
+    def SYNC_DATABASE_URL(self) -> str:
+        """Derives the sync driver URL needed by Alembic or synchronous engines.
+        E.g. Converts 'postgresql+asyncpg://...', 'postgresql://...', or 'postgres://...'
+        to 'postgresql+psycopg2://...'.
+        """
+        url = (self.DATABASE_SYNC_URL or os.getenv("DATABASE_SYNC_URL", "")).strip()
+        if not url:
+            url = (self.DATABASE_URL or os.getenv("DATABASE_URL", "")).strip()
+        if not url:
+            return "sqlite:///./tosh.db"
+        if url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        elif url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+psycopg2://", 1)
+        elif url.startswith("sqlite+aiosqlite://"):
+            return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
+        return url
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:

@@ -53,7 +53,7 @@ jobs:
         working-directory: ./backend
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/tosh_test
-          DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/tosh_test
+          DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/tosh_test
         run: |
           alembic upgrade head
           alembic check
@@ -62,7 +62,7 @@ jobs:
         working-directory: ./backend
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/tosh_test
-          DATABASE_SYNC_URL: postgresql://postgres:postgres@localhost:5432/tosh_test
+          DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/tosh_test
         run: pytest -v --cov=app/services --cov-report=term-missing
 
   frontend-build:

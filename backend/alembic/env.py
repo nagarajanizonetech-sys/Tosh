@@ -20,15 +20,44 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+
+def normalize_url(url: str) -> str:
+    cleaned = url.strip()
+    if cleaned.startswith("postgresql+asyncpg://"):
+        return cleaned.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+    if cleaned.startswith("postgresql://"):
+        return cleaned.replace("postgresql://", "postgresql+psycopg2://", 1)
+    if cleaned.startswith("postgres://"):
+        return cleaned.replace("postgres://", "postgresql+psycopg2://", 1)
+    if cleaned.startswith("sqlite+aiosqlite://"):
+        return cleaned.replace("sqlite+aiosqlite://", "sqlite://", 1)
+    return cleaned
+
+
+def get_sync_url() -> str:
+    url = (
+        getattr(settings, "SYNC_DATABASE_URL", None)
+        or getattr(settings, "DATABASE_SYNC_URL", None)
+        or os.getenv("DATABASE_SYNC_URL")
+        or getattr(settings, "DATABASE_URL", None)
+        or os.getenv("DATABASE_URL")
+        or ""
+    )
+    if not url:
+        return "sqlite:///./tosh.db"
+    return normalize_url(url)
+
+
 # Set database URL dynamically from settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_SYNC_URL)
+config.set_main_option("sqlalchemy.url", get_sync_url())
 
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
+    raw_url = config.get_main_option("sqlalchemy.url") or get_sync_url()
+    url = normalize_url(raw_url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -44,7 +73,8 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_SYNC_URL
+    raw_url = config.get_main_option("sqlalchemy.url") or get_sync_url()
+    configuration["sqlalchemy.url"] = normalize_url(raw_url)
 
     connectable = engine_from_config(
         configuration,
