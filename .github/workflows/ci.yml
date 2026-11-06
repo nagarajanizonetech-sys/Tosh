@@ -54,6 +54,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/tosh_test
           DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/tosh_test
+          JWT_SECRET_KEY: test-secret-key-for-jwt-authentication-signing-32bytes-long
         run: |
           alembic upgrade head
           alembic check
@@ -63,6 +64,10 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/tosh_test
           DATABASE_SYNC_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/tosh_test
+          JWT_SECRET_KEY: test-secret-key-for-jwt-authentication-signing-32bytes-long
+          RECEPTION_INITIAL_PASSWORD: Reception_Pass123!
+          SKIN_INITIAL_PASSWORD: SkinDoctor_Pass123!
+          ORTHO_INITIAL_PASSWORD: OrthoDoctor_Pass123!
         run: pytest -v --cov=app/services --cov-report=term-missing
 
   frontend-build:

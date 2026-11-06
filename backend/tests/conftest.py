@@ -11,7 +11,9 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 
-# Test fixture throwaway passwords for testing
+# Test fixture throwaway secrets and passwords for testing
+if not settings.JWT_SECRET_KEY:
+    settings.JWT_SECRET_KEY = "test-secret-key-for-jwt-authentication-signing-32bytes-long"
 if not settings.RECEPTION_INITIAL_PASSWORD:
     settings.RECEPTION_INITIAL_PASSWORD = "FixturePassword123!"
 if not settings.SKIN_INITIAL_PASSWORD:

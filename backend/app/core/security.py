@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -41,14 +42,24 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "iat": now})
-    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    secret_key = (
+        settings.JWT_SECRET_KEY
+        or os.getenv("JWT_SECRET_KEY")
+        or "change-this-to-a-very-secure-random-secret-key-in-production"
+    )
+    return jwt.encode(to_encode, secret_key, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
     """Decode and validate a JWT access token."""
+    secret_key = (
+        settings.JWT_SECRET_KEY
+        or os.getenv("JWT_SECRET_KEY")
+        or "change-this-to-a-very-secure-random-secret-key-in-production"
+    )
     return jwt.decode(
         token,
-        settings.JWT_SECRET_KEY,
+        secret_key,
         algorithms=[settings.JWT_ALGORITHM],
         options={"require": ["exp", "iat"]},
     )

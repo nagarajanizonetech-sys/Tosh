@@ -217,7 +217,12 @@ class Settings(BaseSettings):
         return url
 
     # JWT Authentication (loaded from .env)
-    JWT_SECRET_KEY: str = Field(default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""))
+    JWT_SECRET_KEY: str = Field(
+        default_factory=lambda: (
+            os.getenv("JWT_SECRET_KEY")
+            or "change-this-to-a-very-secure-random-secret-key-in-production"
+        )
+    )
     JWT_ALGORITHM: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
