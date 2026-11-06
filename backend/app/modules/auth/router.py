@@ -57,7 +57,6 @@ async def login(
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
-        refresh_token=None,
         user=UserPublic.model_validate(user),
     )
 
