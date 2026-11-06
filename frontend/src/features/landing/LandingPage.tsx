@@ -76,13 +76,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  const filteredServices = useMemo<ClinicalService[]>(
-    () =>
-      serviceFilter === "all"
-        ? CLINICAL_SERVICES
-        : CLINICAL_SERVICES.filter((s) => s.category === serviceFilter),
-    [serviceFilter],
-  );
+  const filteredServices = useMemo<ClinicalService[]>(() => {
+    if (serviceFilter === "all") {
+      const ortho = CLINICAL_SERVICES.find((s) => s.category === "ortho");
+      const skin = CLINICAL_SERVICES.find((s) => s.category === "skin");
+      const cosmo = CLINICAL_SERVICES.find((s) => s.category === "cosmetology");
+      const trio = [ortho, skin, cosmo].filter(Boolean) as ClinicalService[];
+      return trio.length === 3 ? trio : CLINICAL_SERVICES.slice(0, 3);
+    }
+    return CLINICAL_SERVICES.filter((s) => s.category === serviceFilter).slice(0, 3);
+  }, [serviceFilter]);
 
   useEffect(() => {
     const handleScroll = (): void => {

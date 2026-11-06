@@ -86,18 +86,28 @@ export function ServicesSection({
             </div>
 
             <div className="services-grid">
-              {filteredServices.map((s) => (
+              {filteredServices.slice(0, 3).map((s, index) => (
                 <div key={s.id} className={`service-card ${s.category}`}>
                   <div className="service-card-top">
-                    <span className="service-tag">{s.badge}</span>
-                    <span className="service-doctor-badge">{s.doctor}</span>
+                    <span className="service-number">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <div className="service-top-pills">
+                      <span className="service-tag">{s.badge}</span>
+                      {s.doctor && (
+                        <span className="service-doctor-badge">{s.doctor}</span>
+                      )}
+                    </div>
                   </div>
                   <h3>{s.title}</h3>
                   <p className="service-summary">{s.summary}</p>
+                  <div className="service-card-divider" />
                   <ul className="service-highlights">
                     {s.highlights.map((h) => (
                       <li key={h}>
-                        <Icon n="check" s={13} />
+                        <span className="service-check-bullet">
+                          <Icon n="check" s={11} />
+                        </span>
                         <span>{h}</span>
                       </li>
                     ))}
@@ -114,7 +124,8 @@ export function ServicesSection({
                         scroll("contact");
                       }}
                     >
-                      Consult Doctor <Icon n="arrow" s={13} />
+                      <span>Consult Doctor</span>
+                      <Icon n="arrow" s={13} />
                     </button>
                     <a
                       href={s.url}
@@ -122,7 +133,8 @@ export function ServicesSection({
                       rel="noreferrer"
                       className="service-link-info"
                     >
-                      Official info <Icon n="arrow" s={13} />
+                      <span>Official info</span>
+                      <Icon n="arrow" s={12} />
                     </a>
                   </div>
                 </div>

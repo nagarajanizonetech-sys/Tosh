@@ -115,51 +115,6 @@ export function ServicesHero3DStage({
             );
           })}
         </div>
-
-        {/* Structured Highlight Strip: Centered beneath the cards */}
-        <div className="s3d-highlight-strip">
-          {currentData.highlights.map((item, idx) => (
-            <span key={idx} className="s3d-highlight-pill">
-              <i>✦</i> {item}
-            </span>
-          ))}
-        </div>
-
-        {/* 3D Switcher Bar with generous bottom clearance */}
-        <div className="s3d-switcher-bar" role="tablist">
-          <button
-            type="button"
-            className={`s3d-switch-btn ${activeCategoryKey === "all" ? "active" : ""}`}
-            onClick={() => onSelectCategory("all")}
-          >
-            <span className="s3d-btn-dot" />
-            <span>✦ All Care</span>
-          </button>
-          <button
-            type="button"
-            className={`s3d-switch-btn btn-ortho ${activeCategoryKey === "ortho" ? "active" : ""}`}
-            onClick={() => onSelectCategory("ortho")}
-          >
-            <span className="s3d-btn-dot" />
-            <span>🦴 Orthopaedics</span>
-          </button>
-          <button
-            type="button"
-            className={`s3d-switch-btn btn-skin ${activeCategoryKey === "skin" ? "active" : ""}`}
-            onClick={() => onSelectCategory("skin")}
-          >
-            <span className="s3d-btn-dot" />
-            <span>🔬 Skin</span>
-          </button>
-          <button
-            type="button"
-            className={`s3d-switch-btn btn-cosmo ${activeCategoryKey === "cosmetology" ? "active" : ""}`}
-            onClick={() => onSelectCategory("cosmetology")}
-          >
-            <span className="s3d-btn-dot" />
-            <span>✨ Cosmetology</span>
-          </button>
-        </div>
       </div>
     </div>
   );
