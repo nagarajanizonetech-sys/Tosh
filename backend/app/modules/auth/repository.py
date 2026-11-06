@@ -23,11 +23,7 @@ class AuthRepository:
         return result.scalar_one_or_none()
 
     async def update_last_login(self, user_id: uuid.UUID) -> None:
-        stmt = (
-            update(User)
-            .where(User.id == user_id)
-            .values(last_login_at=datetime.now(UTC))
-        )
+        stmt = update(User).where(User.id == user_id).values(last_login_at=datetime.now(UTC))
         await self.db.execute(stmt)
 
     async def create_refresh_token(

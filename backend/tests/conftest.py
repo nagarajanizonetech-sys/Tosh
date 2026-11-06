@@ -21,9 +21,7 @@ if not settings.ORTHO_INITIAL_PASSWORD:
 
 # Database configuration: PostgreSQL is strictly required for all backend tests
 TEST_DATABASE_URL = (
-    os.environ.get("TEST_DATABASE_URL")
-    or os.environ.get("DATABASE_URL")
-    or settings.DATABASE_URL
+    os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL") or settings.DATABASE_URL
 )
 if "postgres" not in TEST_DATABASE_URL.lower():
     raise RuntimeError(
@@ -71,20 +69,24 @@ from app.modules.users.models import Doctor, User
 async def setup_test_db():
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE OR REPLACE FUNCTION prevent_audit_log_modification()
             RETURNS trigger AS $$
             BEGIN
                 RAISE EXCEPTION 'audit_log table is append-only. UPDATE and DELETE operations are forbidden.';
             END;
             $$ LANGUAGE plpgsql;
-        """))
+        """)
+        )
         await conn.execute(text("DROP TRIGGER IF EXISTS trg_audit_log_append_only ON audit_log;"))
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TRIGGER trg_audit_log_append_only
             BEFORE UPDATE OR DELETE ON audit_log
             FOR EACH ROW EXECUTE FUNCTION prevent_audit_log_modification();
-        """))
+        """)
+        )
         table_names = [f'"{t.name}"' for t in Base.metadata.sorted_tables]
         if table_names:
             await conn.execute(text(f"TRUNCATE TABLE {', '.join(table_names)} CASCADE;"))
@@ -125,11 +127,14 @@ async def seed_test_users(db_session: AsyncSession):
     await db_session.flush()
 
     doc_skin = Doctor(user_id=skin.id, display_name="Dr. Sangamitra", department="skin")
-    doc_ortho = Doctor(user_id=ortho.id, display_name="Dr. Sundarprakash", department="orthopaedics")
+    doc_ortho = Doctor(
+        user_id=ortho.id, display_name="Dr. Sundarprakash", department="orthopaedics"
+    )
     db_session.add_all([doc_skin, doc_ortho])
 
     # Fee settings
     from app.modules.settings.models import FeeSetting
+
     fee_skin = FeeSetting(department="skin", amount=70000, currency="INR")
     fee_ortho = FeeSetting(department="orthopaedics", amount=90000, currency="INR")
     db_session.add_all([fee_skin, fee_ortho])
@@ -137,11 +142,11 @@ async def seed_test_users(db_session: AsyncSession):
     # Charge Catalog
     from app.modules.catalog.models import ChargeCatalogItem
     from app.scripts.seed import CATALOG_ITEMS
+
     for c in CATALOG_ITEMS:
         db_session.add(ChargeCatalogItem(**c))
 
     await db_session.commit()
-
 
 
 @pytest.fixture

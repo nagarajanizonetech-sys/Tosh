@@ -156,7 +156,9 @@ def _attach_error_cors(request: Request, response: JSONResponse) -> JSONResponse
         if req_headers:
             response.headers["Access-Control-Allow-Headers"] = req_headers
         else:
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Request-ID"
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization, Accept, X-Request-ID"
+            )
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS"
     return response
 
@@ -170,20 +172,23 @@ async def app_exception_handler(request: Request, exc: Exception) -> JSONRespons
     return _attach_error_cors(request, resp)
 
 
-async def validation_exception_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     val_exc = exc if isinstance(exc, RequestValidationError) else RequestValidationError([])
     field_errors = []
     for err in val_exc.errors():
-        field_errors.append({
-            "field": ".".join(str(loc) for loc in err["loc"] if loc != "body"),
-            "message": err["msg"],
-            "type": err["type"],
-        })
+        field_errors.append(
+            {
+                "field": ".".join(str(loc) for loc in err["loc"] if loc != "body"),
+                "message": err["msg"],
+                "type": err["type"],
+            }
+        )
     details_str = ", ".join(f"{e['field']}: {e['message']}" for e in field_errors)
     msg = f"Input validation failed: {details_str}" if details_str else "Input validation failed."
-    print(f"\n[ERROR 422] Validation error on {request.method} {request.url.path}: {field_errors}\n", flush=True)
+    print(
+        f"\n[ERROR 422] Validation error on {request.method} {request.url.path}: {field_errors}\n",
+        flush=True,
+    )
     resp = JSONResponse(
         status_code=422,
         content={
@@ -197,17 +202,22 @@ async def validation_exception_handler(
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     import traceback
+
     tb = traceback.format_exc()
     import structlog
+
     log = structlog.get_logger("tosh.errors")
     log.error("unhandled_server_error", error=str(exc), path=request.url.path, traceback=tb)
-    print(f"\n[ERROR 500] Unhandled exception on {request.method} {request.url.path}:\n{tb}\n", flush=True)
+    print(
+        f"\n[ERROR 500] Unhandled exception on {request.method} {request.url.path}:\n{tb}\n",
+        flush=True,
+    )
 
     resp = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "code": "INTERNAL_SERVER_ERROR",
-            "message": f"Server error: {str(exc)}",
+            "message": f"Server error: {exc!s}",
             "details": None,
         },
     )

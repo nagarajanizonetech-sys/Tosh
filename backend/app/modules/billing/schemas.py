@@ -52,7 +52,6 @@ class InvoiceResponse(CamelModel):
     date: str = ""
 
 
-
 class PaginatedInvoicesResponse(CamelModel):
     items: list[InvoiceResponse]
     page: int

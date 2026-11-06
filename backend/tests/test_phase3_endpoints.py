@@ -102,7 +102,9 @@ async def test_patient_registration_and_validation(async_client: AsyncClient, re
 
 
 @pytest.mark.asyncio
-async def test_patient_department_isolation(async_client: AsyncClient, reception_headers, skin_doctor_headers, ortho_doctor_headers):
+async def test_patient_department_isolation(
+    async_client: AsyncClient, reception_headers, skin_doctor_headers, ortho_doctor_headers
+):
     # Register an ortho patient
     res = await async_client.post(
         "/api/v1/patients",
@@ -124,7 +126,9 @@ async def test_patient_department_isolation(async_client: AsyncClient, reception
     assert res_ortho.status_code == 200
 
     # Skin doctor forbidden from requesting orthopaedics list
-    res_skin_forbidden = await async_client.get("/api/v1/patients?department=orthopaedics", headers=skin_doctor_headers)
+    res_skin_forbidden = await async_client.get(
+        "/api/v1/patients?department=orthopaedics", headers=skin_doctor_headers
+    )
     assert res_skin_forbidden.status_code == 403
 
 
@@ -186,7 +190,9 @@ async def test_atomic_queue_checkin(async_client: AsyncClient, reception_headers
 
 
 @pytest.mark.asyncio
-async def test_appointment_state_machine_and_queue_sync(async_client: AsyncClient, reception_headers):
+async def test_appointment_state_machine_and_queue_sync(
+    async_client: AsyncClient, reception_headers
+):
     # Register patient
     pat_res = await async_client.post(
         "/api/v1/patients",
@@ -239,7 +245,9 @@ async def test_appointment_state_machine_and_queue_sync(async_client: AsyncClien
     assert res_checkin.json()["status"] == "Checked-in"
 
     # Verify queue entry was created with Ortho token (O-###)
-    q_res = await async_client.get("/api/v1/queue?department=orthopaedics", headers=reception_headers)
+    q_res = await async_client.get(
+        "/api/v1/queue?department=orthopaedics", headers=reception_headers
+    )
     assert q_res.status_code == 200
     q_items = q_res.json()["items"]
     matched_q = next(item for item in q_items if item["patientId"] == pat_id)
@@ -256,7 +264,9 @@ async def test_appointment_state_machine_and_queue_sync(async_client: AsyncClien
     assert res_consulting.json()["status"] == "Consulting"
 
     # Verify appointment status synced to In progress
-    apt_check = await async_client.get("/api/v1/appointments?department=orthopaedics", headers=reception_headers)
+    apt_check = await async_client.get(
+        "/api/v1/appointments?department=orthopaedics", headers=reception_headers
+    )
     updated_apt = next(a for a in apt_check.json()["items"] if a["id"] == apt_id)
     assert updated_apt["status"] == "In progress"
 

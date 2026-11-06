@@ -26,7 +26,14 @@ async def test_login_contract_camel_case(async_client: AsyncClient, seed_test_us
     assert isinstance(data["accessToken"], str)
 
     user = data["user"]
-    assert set(user.keys()) == {"id", "email", "displayName", "role", "department", "mustChangePassword"}
+    assert set(user.keys()) == {
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "department",
+        "mustChangePassword",
+    }
     assert user["email"] == "reception@northstar.demo"
     assert user["displayName"] == "Reception Desk"
     assert user["role"] == "reception"
@@ -34,7 +41,9 @@ async def test_login_contract_camel_case(async_client: AsyncClient, seed_test_us
 
 
 @pytest.mark.asyncio
-async def test_doctors_endpoint_returns_real_seeded_doctors(async_client: AsyncClient, seed_test_users):
+async def test_doctors_endpoint_returns_real_seeded_doctors(
+    async_client: AsyncClient, seed_test_users
+):
     """Assert GET /doctors returns seeded real doctors with display names."""
     res = await async_client.get("/api/v1/doctors")
     assert res.status_code == 200
@@ -77,13 +86,17 @@ async def test_failed_login_lockout(async_client: AsyncClient, seed_test_users):
 async def test_slowapi_rate_limiting(async_client: AsyncClient, seed_test_users):
     """Assert rate limiter triggers 429 when enabled."""
     from app.core.limiter import limiter
+
     limiter.enabled = True
     try:
         # Rapid fire requests beyond limit
         for _ in range(12):
             res = await async_client.post(
                 "/api/v1/auth/login",
-                json={"email": "reception@northstar.demo", "password": settings.RECEPTION_INITIAL_PASSWORD},
+                json={
+                    "email": "reception@northstar.demo",
+                    "password": settings.RECEPTION_INITIAL_PASSWORD,
+                },
             )
         assert res.status_code == 429
         assert res.json()["code"] == "RATE_LIMIT_EXCEEDED"
@@ -92,7 +105,9 @@ async def test_slowapi_rate_limiting(async_client: AsyncClient, seed_test_users)
 
 
 @pytest.mark.asyncio
-async def test_audit_log_records_login_events(async_client: AsyncClient, db_session: AsyncSession, seed_test_users):
+async def test_audit_log_records_login_events(
+    async_client: AsyncClient, db_session: AsyncSession, seed_test_users
+):
     """Assert login attempts write to audit_log table."""
     await async_client.post(
         "/api/v1/auth/login",
@@ -102,9 +117,7 @@ async def test_audit_log_records_login_events(async_client: AsyncClient, db_sess
         },
     )
 
-    res = await db_session.execute(
-        select(AuditLog).where(AuditLog.action == "AUTH_LOGIN_SUCCESS")
-    )
+    res = await db_session.execute(select(AuditLog).where(AuditLog.action == "AUTH_LOGIN_SUCCESS"))
     logs = res.scalars().all()
     assert len(logs) > 0
     assert any(log.after_state.get("email") == "ortho@gmail.com" for log in logs if log.after_state)
@@ -134,8 +147,6 @@ async def test_audit_log_append_only_trigger(db_session: AsyncSession):
 
     # Attempt DELETE - should raise an exception
     with pytest.raises(SQLAlchemyError):
-        await db_session.execute(
-            delete(AuditLog).where(AuditLog.id == log.id)
-        )
+        await db_session.execute(delete(AuditLog).where(AuditLog.id == log.id))
         await db_session.commit()
     await db_session.rollback()

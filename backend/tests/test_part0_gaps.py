@@ -37,7 +37,9 @@ async def ortho_doctor_headers(async_client: AsyncClient, seed_test_users):
 
 
 @pytest.mark.asyncio
-async def test_patient_duplicate_check_and_force_override(async_client: AsyncClient, reception_headers):
+async def test_patient_duplicate_check_and_force_override(
+    async_client: AsyncClient, reception_headers
+):
     # 1. Register a patient
     payload = {
         "fullName": "Vikram Sethi",
@@ -61,7 +63,9 @@ async def test_patient_duplicate_check_and_force_override(async_client: AsyncCli
     assert err["details"]["phone"] == "9887766554"
 
     # 3. Override with force=true -> 201 Created
-    res_force = await async_client.post("/api/v1/patients?force=true", headers=reception_headers, json=payload)
+    res_force = await async_client.post(
+        "/api/v1/patients?force=true", headers=reception_headers, json=payload
+    )
     assert res_force.status_code == 201
     assert res_force.json()["id"] != pat1_id
 
@@ -205,23 +209,37 @@ async def test_patient_id_filters_and_subresource(async_client: AsyncClient, rec
     await async_client.post(
         "/api/v1/appointments",
         headers=reception_headers,
-        json={"patientId": pat_a, "department": "skin", "doctor": "Dr. Sangamitra", "startsAt": dt1},
+        json={
+            "patientId": pat_a,
+            "department": "skin",
+            "doctor": "Dr. Sangamitra",
+            "startsAt": dt1,
+        },
     )
     await async_client.post(
         "/api/v1/appointments",
         headers=reception_headers,
-        json={"patientId": pat_b, "department": "skin", "doctor": "Dr. Sangamitra", "startsAt": dt2},
+        json={
+            "patientId": pat_b,
+            "department": "skin",
+            "doctor": "Dr. Sangamitra",
+            "startsAt": dt2,
+        },
     )
 
     # Filter GET /appointments?patientId=pat_a
-    res_filter_a = await async_client.get(f"/api/v1/appointments?patientId={pat_a}", headers=reception_headers)
+    res_filter_a = await async_client.get(
+        f"/api/v1/appointments?patientId={pat_a}", headers=reception_headers
+    )
     assert res_filter_a.status_code == 200
     items_a = res_filter_a.json()["items"]
     assert len(items_a) == 1
     assert items_a[0]["patientId"] == pat_a
 
     # Test sub-resource GET /patients/{id}/appointments
-    res_sub_a = await async_client.get(f"/api/v1/patients/{pat_a}/appointments", headers=reception_headers)
+    res_sub_a = await async_client.get(
+        f"/api/v1/patients/{pat_a}/appointments", headers=reception_headers
+    )
     assert res_sub_a.status_code == 200
     sub_items_a = res_sub_a.json()["items"]
     assert len(sub_items_a) == 1

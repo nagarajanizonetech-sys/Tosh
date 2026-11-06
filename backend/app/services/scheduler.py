@@ -43,6 +43,7 @@ async def process_scheduled_reminders(db: AsyncSession) -> int:
             kind = "on-date"
         else:
             from datetime import date, timedelta
+
             fu_date = date.fromisoformat(fu.date)
             today_date = date.fromisoformat(today_ist)
             if fu_date == today_date + timedelta(days=2):

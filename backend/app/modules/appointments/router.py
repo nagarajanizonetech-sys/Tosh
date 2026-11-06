@@ -6,8 +6,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppException, ConflictException, ForbiddenException, NotFoundException
-from app.core.websocket import broadcast_event
 from app.core.tokens import next_display_id
+from app.core.websocket import broadcast_event
 from app.db.session import get_db
 from app.modules.appointments.models import Appointment
 from app.modules.appointments.schemas import (
@@ -34,7 +34,9 @@ VALID_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
-def to_appointment_response(apt: Appointment, patient_display_id: str, doctor_name: str) -> AppointmentResponse:
+def to_appointment_response(
+    apt: Appointment, patient_display_id: str, doctor_name: str
+) -> AppointmentResponse:
     return AppointmentResponse(
         id=apt.display_id,
         patient_id=patient_display_id,
@@ -50,7 +52,9 @@ def to_appointment_response(apt: Appointment, patient_display_id: str, doctor_na
 async def find_appointment_by_id(db: AsyncSession, identifier: str) -> Appointment | None:
     try:
         val_uuid = uuid.UUID(identifier)
-        stmt = select(Appointment).where(or_(Appointment.id == val_uuid, Appointment.display_id == identifier))
+        stmt = select(Appointment).where(
+            or_(Appointment.id == val_uuid, Appointment.display_id == identifier)
+        )
     except ValueError:
         stmt = select(Appointment).where(Appointment.display_id == identifier)
     res = await db.execute(stmt)
@@ -71,7 +75,9 @@ async def list_appointments(
     # Department guard
     if current_user.role in ("skin", "orthopaedics"):
         if department and department.lower() != current_user.role:
-            raise ForbiddenException("Clinicians cannot access appointments from other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot access appointments from other departments."
+            )
         department = current_user.role
 
     stmt = select(Appointment)
@@ -99,7 +105,9 @@ async def list_appointments(
     total = total_res.scalar_one() or 0
 
     # Paginate
-    stmt = stmt.order_by(Appointment.starts_at.asc()).offset((page - 1) * page_size).limit(page_size)
+    stmt = (
+        stmt.order_by(Appointment.starts_at.asc()).offset((page - 1) * page_size).limit(page_size)
+    )
     res = await db.execute(stmt)
     appointments = res.scalars().all()
 
@@ -121,7 +129,12 @@ require_reception = require_role("reception")
 require_staff = require_role("reception", "skin", "orthopaedics")
 
 
-@router.post("", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED, summary="Create appointment")
+@router.post(
+    "",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create appointment",
+)
 async def create_appointment(
     payload: CreateAppointmentRequest,
     db: AsyncSession = Depends(get_db),
@@ -158,7 +171,9 @@ async def create_appointment(
     try:
         starts_dt = datetime.fromisoformat(payload.starts_at)
     except ValueError:
-        raise AppException("Invalid ISO datetime format for startsAt.", code="VALIDATION_ERROR", status_code=422)
+        raise AppException(
+            "Invalid ISO datetime format for startsAt.", code="VALIDATION_ERROR", status_code=422
+        )
 
     now_utc = datetime.now(UTC)
     check_dt = starts_dt if starts_dt.tzinfo else starts_dt.replace(tzinfo=UTC)
@@ -198,16 +213,23 @@ async def create_appointment(
     await db.commit()
     await db.refresh(appointment)
 
-    await broadcast_event("APPOINTMENT_UPDATE", {
-        "action": "create",
-        "id": appointment.display_id,
-        "department": dept,
-    })
+    await broadcast_event(
+        "APPOINTMENT_UPDATE",
+        {
+            "action": "create",
+            "id": appointment.display_id,
+            "department": dept,
+        },
+    )
 
     return to_appointment_response(appointment, patient.display_id, doctor.display_name)
 
 
-@router.patch("/{appointment_id}", response_model=AppointmentResponse, summary="Update appointment status or details")
+@router.patch(
+    "/{appointment_id}",
+    response_model=AppointmentResponse,
+    summary="Update appointment status or details",
+)
 async def update_appointment(
     appointment_id: str,
     payload: UpdateAppointmentRequest,
@@ -220,11 +242,17 @@ async def update_appointment(
 
     if current_user.role in ("skin", "orthopaedics"):
         if appointment.department != current_user.role:
-            raise ForbiddenException("Clinicians cannot modify appointments from other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot modify appointments from other departments."
+            )
         if payload.status and payload.status not in ("In progress", "Completed"):
-            raise ForbiddenException("Doctors may only transition appointments to 'In progress' or 'Completed'.")
+            raise ForbiddenException(
+                "Doctors may only transition appointments to 'In progress' or 'Completed'."
+            )
         if payload.starts_at or payload.doctor:
-            raise ForbiddenException("Doctors cannot reschedule appointments or change assigned doctor.")
+            raise ForbiddenException(
+                "Doctors cannot reschedule appointments or change assigned doctor."
+            )
 
     # State Machine Check
     if payload.status and payload.status != appointment.status:
@@ -242,7 +270,11 @@ async def update_appointment(
         # If Checked-in, trigger CheckInService
         if new_status == "Checked-in":
             # Check if queue entry exists for this appointment
-            q_stmt = select(QueueEntry).join(QueueEntry.visit).where(QueueEntry.visit.has(appointment_id=appointment.id))
+            q_stmt = (
+                select(QueueEntry)
+                .join(QueueEntry.visit)
+                .where(QueueEntry.visit.has(appointment_id=appointment.id))
+            )
             q_res = await db.execute(q_stmt)
             existing_queue = q_res.scalar_one_or_none()
             if not existing_queue:
@@ -259,14 +291,22 @@ async def update_appointment(
 
         # Sync QueueEntry if status transitions to In progress or Completed
         elif new_status == "In progress":
-            q_stmt = select(QueueEntry).join(QueueEntry.visit).where(QueueEntry.visit.has(appointment_id=appointment.id))
+            q_stmt = (
+                select(QueueEntry)
+                .join(QueueEntry.visit)
+                .where(QueueEntry.visit.has(appointment_id=appointment.id))
+            )
             q_res = await db.execute(q_stmt)
             q_entry = q_res.scalar_one_or_none()
             if q_entry and q_entry.status != "Consulting":
                 q_entry.status = "Consulting"
 
         elif new_status == "Completed":
-            q_stmt = select(QueueEntry).join(QueueEntry.visit).where(QueueEntry.visit.has(appointment_id=appointment.id))
+            q_stmt = (
+                select(QueueEntry)
+                .join(QueueEntry.visit)
+                .where(QueueEntry.visit.has(appointment_id=appointment.id))
+            )
             q_res = await db.execute(q_stmt)
             q_entry = q_res.scalar_one_or_none()
             if q_entry and q_entry.status != "Completed":
@@ -280,7 +320,9 @@ async def update_appointment(
             raise ValueError("Invalid ISO datetime format for startsAt.")
 
     if payload.doctor:
-        doc_stmt = select(Doctor).where(Doctor.department == appointment.department, Doctor.display_name == payload.doctor)
+        doc_stmt = select(Doctor).where(
+            Doctor.department == appointment.department, Doctor.display_name == payload.doctor
+        )
         doc_res = await db.execute(doc_stmt)
         doc = doc_res.scalar_one_or_none()
         if doc:
@@ -292,13 +334,18 @@ async def update_appointment(
     await db.commit()
     await db.refresh(appointment)
 
-    await broadcast_event("APPOINTMENT_UPDATE", {
-        "action": "update",
-        "id": appointment.display_id,
-        "status": appointment.status,
-        "department": appointment.department,
-    })
+    await broadcast_event(
+        "APPOINTMENT_UPDATE",
+        {
+            "action": "update",
+            "id": appointment.display_id,
+            "status": appointment.status,
+            "department": appointment.department,
+        },
+    )
 
-    pat_display_id = appointment.patient.display_id if appointment.patient else str(appointment.patient_id)
+    pat_display_id = (
+        appointment.patient.display_id if appointment.patient else str(appointment.patient_id)
+    )
     doc_name = appointment.doctor.display_name if appointment.doctor else "Unknown Doctor"
     return to_appointment_response(appointment, pat_display_id, doc_name)

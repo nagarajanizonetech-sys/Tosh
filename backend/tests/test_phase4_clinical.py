@@ -84,19 +84,25 @@ async def test_consultation_rbac_and_read(
     visit_id = skin_visit["visitId"]
 
     # Reception can read consultation
-    rec_res = await async_client.get(f"/api/v1/visits/{visit_id}/consultation", headers=reception_headers)
+    rec_res = await async_client.get(
+        f"/api/v1/visits/{visit_id}/consultation", headers=reception_headers
+    )
     assert rec_res.status_code == 200
     rec_data = rec_res.json()
     assert rec_data["id"] == visit_id
     assert rec_data["vitals"]["bloodPressure"] == "115/75 mmHg"
 
     # Skin doctor can read consultation
-    skin_res = await async_client.get(f"/api/v1/visits/{visit_id}/consultation", headers=skin_doctor_headers)
+    skin_res = await async_client.get(
+        f"/api/v1/visits/{visit_id}/consultation", headers=skin_doctor_headers
+    )
     assert skin_res.status_code == 200
     assert skin_res.json()["department"] == "skin"
 
     # Ortho doctor gets 403 Forbidden on skin consultation
-    ortho_res = await async_client.get(f"/api/v1/visits/{visit_id}/consultation", headers=ortho_doctor_headers)
+    ortho_res = await async_client.get(
+        f"/api/v1/visits/{visit_id}/consultation", headers=ortho_doctor_headers
+    )
     assert ortho_res.status_code == 403
     assert ortho_res.json()["code"] == "FORBIDDEN"
 
@@ -119,7 +125,11 @@ async def test_consultation_edit_and_optimistic_concurrency(
     assert rec_save.status_code == 403
 
     # Initial get to fetch current version
-    initial = (await async_client.get(f"/api/v1/visits/{visit_id}/consultation", headers=skin_doctor_headers)).json()
+    initial = (
+        await async_client.get(
+            f"/api/v1/visits/{visit_id}/consultation", headers=skin_doctor_headers
+        )
+    ).json()
     version = initial["version"]
 
     # Doctor writes consultation successfully
@@ -286,7 +296,9 @@ async def test_documents_lifecycle_and_validation(
     assert dl_tampered.json()["code"] == "UNAUTHENTICATED"
 
     # 5c. Expired timestamp on signed URL -> 401 UNAUTHENTICATED
-    expired_url = signed_url.split("expires=")[0] + "expires=1000000000&sig=" + signed_url.split("sig=")[1]
+    expired_url = (
+        signed_url.split("expires=")[0] + "expires=1000000000&sig=" + signed_url.split("sig=")[1]
+    )
     dl_expired = await async_client.get(expired_url)
     assert dl_expired.status_code == 401
     assert dl_expired.json()["code"] == "UNAUTHENTICATED"

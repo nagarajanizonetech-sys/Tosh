@@ -25,7 +25,9 @@ require_staff = require_role("reception", "skin", "orthopaedics")
 async def find_catalog_item_by_id(db: AsyncSession, identifier: str) -> ChargeCatalogItem | None:
     try:
         val_uuid = uuid.UUID(identifier)
-        stmt = select(ChargeCatalogItem).where(or_(ChargeCatalogItem.id == val_uuid, ChargeCatalogItem.display_id == identifier))
+        stmt = select(ChargeCatalogItem).where(
+            or_(ChargeCatalogItem.id == val_uuid, ChargeCatalogItem.display_id == identifier)
+        )
     except ValueError:
         stmt = select(ChargeCatalogItem).where(ChargeCatalogItem.display_id == identifier)
     res = await db.execute(stmt)
@@ -57,7 +59,12 @@ async def list_catalog_charges(
         stmt = stmt.where(ChargeCatalogItem.is_active.is_(True))
 
     if department:
-        stmt = stmt.where(or_(ChargeCatalogItem.department == department.lower(), ChargeCatalogItem.department == "all"))
+        stmt = stmt.where(
+            or_(
+                ChargeCatalogItem.department == department.lower(),
+                ChargeCatalogItem.department == "all",
+            )
+        )
 
     if category:
         stmt = stmt.where(ChargeCatalogItem.category == category)
@@ -68,7 +75,12 @@ async def list_catalog_charges(
     return [to_catalog_response(item) for item in items]
 
 
-@router.post("", response_model=CatalogItemResponse, status_code=status.HTTP_201_CREATED, summary="Create catalog charge item")
+@router.post(
+    "",
+    response_model=CatalogItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create catalog charge item",
+)
 async def create_catalog_charge(
     payload: CreateCatalogItemRequest,
     request: Request,
@@ -116,7 +128,12 @@ async def update_catalog_charge(
     if not item:
         raise NotFoundException(f"Catalog charge item with ID {item_id} not found.")
 
-    before_state = {"name": item.name, "category": item.category, "price": round(item.price / 100.0, 2), "is_active": item.is_active}
+    before_state = {
+        "name": item.name,
+        "category": item.category,
+        "price": round(item.price / 100.0, 2),
+        "is_active": item.is_active,
+    }
 
     if payload.name is not None:
         item.name = payload.name
@@ -138,7 +155,12 @@ async def update_catalog_charge(
         entity_id=item.display_id,
         actor_user_id=current_user.id,
         before_state=before_state,
-        after_state={"name": item.name, "category": item.category, "price": round(item.price / 100.0, 2), "is_active": item.is_active},
+        after_state={
+            "name": item.name,
+            "category": item.category,
+            "price": round(item.price / 100.0, 2),
+            "is_active": item.is_active,
+        },
         ip=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )

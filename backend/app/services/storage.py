@@ -22,14 +22,33 @@ def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
 
     # Reject dangerous executable and script files
     dangerous_exts = (
-        ".exe", ".dll", ".bat", ".cmd", ".sh", ".ps1", ".vbs", ".js",
-        ".mjs", ".scr", ".pif", ".com", ".jar", ".php", ".py", ".pl",
-        ".cgi", ".msi", ".apk", ".dmg",
+        ".exe",
+        ".dll",
+        ".bat",
+        ".cmd",
+        ".sh",
+        ".ps1",
+        ".vbs",
+        ".js",
+        ".mjs",
+        ".scr",
+        ".pif",
+        ".com",
+        ".jar",
+        ".php",
+        ".py",
+        ".pl",
+        ".cgi",
+        ".msi",
+        ".apk",
+        ".dmg",
     )
     if any(lower_name.endswith(ext) for ext in dangerous_exts):
-        raise FileRejectedException("Executable files and scripts are not allowed for security reasons.")
+        raise FileRejectedException(
+            "Executable files and scripts are not allowed for security reasons."
+        )
 
-    if content.startswith(b"MZ") or content.startswith(b"\x7fELF"):
+    if content.startswith((b"MZ", b"\x7fELF")):
         raise FileRejectedException("Executable binaries are not allowed.")
 
     # JPEG
@@ -45,11 +64,17 @@ def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
         return "image/webp", ".webp"
 
     # AVIF
-    if (len(content) >= 12 and content[4:8] == b"ftyp" and content[8:12] in (b"avif", b"avis")) or lower_name.endswith(".avif"):
+    if (
+        len(content) >= 12 and content[4:8] == b"ftyp" and content[8:12] in (b"avif", b"avis")
+    ) or lower_name.endswith(".avif"):
         return "image/avif", ".avif"
 
     # HEIC / HEIF
-    if (len(content) >= 12 and content[4:8] == b"ftyp" and content[8:12] in (b"heic", b"heix", b"hevc", b"mif1", b"msf1")) or lower_name.endswith((".heic", ".heif")):
+    if (
+        len(content) >= 12
+        and content[4:8] == b"ftyp"
+        and content[8:12] in (b"heic", b"heix", b"hevc", b"mif1", b"msf1")
+    ) or lower_name.endswith((".heic", ".heif")):
         return "image/heic", ".heic"
 
     # DICOM medical imaging (.dcm)
@@ -57,7 +82,7 @@ def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
         return "application/dicom", ".dcm"
 
     # GIF
-    if content.startswith(b"GIF87a") or content.startswith(b"GIF89a"):
+    if content.startswith((b"GIF87a", b"GIF89a")):
         return "image/gif", ".gif"
 
     # BMP
@@ -65,7 +90,7 @@ def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
         return "image/bmp", ".bmp"
 
     # TIFF
-    if content.startswith(b"II*\x00") or content.startswith(b"MM\x00*"):
+    if content.startswith((b"II*\x00", b"MM\x00*")):
         return "image/tiff", ".tiff"
 
     # SVG
@@ -104,7 +129,9 @@ def validate_file_magic_bytes(content: bytes, filename: str) -> tuple[str, str]:
     if lower_name.endswith(".doc") or content.startswith(b"\xd0\xcf\x11\xe0"):
         return "application/msword", ".doc"
 
-    raise FileRejectedException("Unsupported file type. Only JPEG, PNG, WEBP, AVIF, HEIC, GIF, BMP, TIFF, SVG, PDF, DICOM, and DOC documents are allowed.")
+    raise FileRejectedException(
+        "Unsupported file type. Only JPEG, PNG, WEBP, AVIF, HEIC, GIF, BMP, TIFF, SVG, PDF, DICOM, and DOC documents are allowed."
+    )
 
 
 class StorageService(ABC):
@@ -148,7 +175,18 @@ class LocalStorageService(StorageService):
         clean_key = Path(key).name
         target_path = self.base_dir / clean_key
         if not target_path.exists():
-            for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".txt", ".doc", ".docx"):
+            for ext in (
+                ".pdf",
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".webp",
+                ".gif",
+                ".bmp",
+                ".txt",
+                ".doc",
+                ".docx",
+            ):
                 alt = self.base_dir / f"{clean_key}{ext}"
                 if alt.exists():
                     target_path = alt
@@ -221,7 +259,9 @@ class LocalStorageService(StorageService):
 
         # Check with candidate extensions and stem variations
         stem = Path(clean_key).stem
-        candidates = [stem] + [f"{stem}{ext}" for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")]
+        candidates = [stem] + [
+            f"{stem}{ext}" for ext in (".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+        ]
         for cand in candidates:
             cand_payload = f"{cand}:{expires}".encode()
             cand_expected = hmac.new(secret, cand_payload, hashlib.sha256).hexdigest()

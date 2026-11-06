@@ -62,7 +62,9 @@ async def skin_invoice(async_client: AsyncClient, reception_headers):
     visit_id = q_res.json()["visitId"]
 
     # Fetch invoice
-    inv_res = await async_client.get(f"/api/v1/invoices?patientId={pat_id}", headers=reception_headers)
+    inv_res = await async_client.get(
+        f"/api/v1/invoices?patientId={pat_id}", headers=reception_headers
+    )
     assert inv_res.status_code == 200
     items = inv_res.json()["items"]
     assert len(items) >= 1
@@ -71,7 +73,9 @@ async def skin_invoice(async_client: AsyncClient, reception_headers):
 
 
 @pytest.mark.asyncio
-async def test_billing_math_and_payments(async_client: AsyncClient, skin_invoice, reception_headers):
+async def test_billing_math_and_payments(
+    async_client: AsyncClient, skin_invoice, reception_headers
+):
     invoice = skin_invoice["invoice"]
     inv_id = invoice["id"]
 
@@ -155,7 +159,9 @@ async def test_idempotent_payment_retry(async_client: AsyncClient, skin_invoice,
 
 
 @pytest.mark.asyncio
-async def test_refund_workflow(async_client: AsyncClient, skin_invoice, reception_headers, skin_doctor_headers):
+async def test_refund_workflow(
+    async_client: AsyncClient, skin_invoice, reception_headers, skin_doctor_headers
+):
     inv_id = skin_invoice["invoice"]["id"]
 
     # Record ₹500 payment
@@ -236,7 +242,9 @@ async def test_visit_charge_addition_and_catalog_price_resolution(
     assert cat_data["amount"] == 1800.0  # Server authoritative catalog price!
 
     # 4. Verify invoice total updated: fee ₹700 + ₹1500 + ₹1800 = ₹4000
-    inv_res = await async_client.get(f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers)
+    inv_res = await async_client.get(
+        f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers
+    )
     updated_inv = inv_res.json()["items"][0]
     assert updated_inv["total"] == 4000.0
     assert updated_inv["balance"] == 4000.0
@@ -271,16 +279,22 @@ async def test_fee_settings_does_not_affect_existing_invoices(
     assert fee_res.json()["skin"] == 1000.0
 
     # Old invoice fee is unchanged!
-    inv_res = await async_client.get(f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers)
+    inv_res = await async_client.get(
+        f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers
+    )
     old_inv = inv_res.json()["items"][0]
     assert old_inv["consultationFee"] == 700.0
 
     # Reset fee back to 700
-    await async_client.put("/api/v1/settings/fees/skin", headers=reception_headers, json={"amount": 700.0})
+    await async_client.put(
+        "/api/v1/settings/fees/skin", headers=reception_headers, json={"amount": 700.0}
+    )
 
 
 @pytest.mark.asyncio
-async def test_catalog_crud_and_rbac(async_client: AsyncClient, reception_headers, skin_doctor_headers):
+async def test_catalog_crud_and_rbac(
+    async_client: AsyncClient, reception_headers, skin_doctor_headers
+):
     # 1. Doctors can read catalog
     list_res = await async_client.get("/api/v1/catalog/charges", headers=skin_doctor_headers)
     assert list_res.status_code == 200
@@ -299,7 +313,12 @@ async def test_catalog_crud_and_rbac(async_client: AsyncClient, reception_header
     create_res = await async_client.post(
         "/api/v1/catalog/charges",
         headers=reception_headers,
-        json={"name": "Fractional CO2 Laser", "category": "Procedure", "price": 4500.0, "department": "skin"},
+        json={
+            "name": "Fractional CO2 Laser",
+            "category": "Procedure",
+            "price": 4500.0,
+            "department": "skin",
+        },
     )
     assert create_res.status_code == 201
     item = create_res.json()
@@ -316,7 +335,9 @@ async def test_catalog_crud_and_rbac(async_client: AsyncClient, reception_header
     assert update_res.json()["price"] == 4800.0
 
     # 5. Reception deactivates catalog item
-    del_res = await async_client.delete(f"/api/v1/catalog/charges/{item_id}", headers=reception_headers)
+    del_res = await async_client.delete(
+        f"/api/v1/catalog/charges/{item_id}", headers=reception_headers
+    )
     assert del_res.status_code == 200
 
     # Confirm deactivated item is excluded from default listing
@@ -325,7 +346,9 @@ async def test_catalog_crud_and_rbac(async_client: AsyncClient, reception_header
 
 
 @pytest.mark.asyncio
-async def test_doctor_cannot_record_payment(async_client: AsyncClient, skin_invoice, skin_doctor_headers):
+async def test_doctor_cannot_record_payment(
+    async_client: AsyncClient, skin_invoice, skin_doctor_headers
+):
     inv_id = skin_invoice["invoice"]["id"]
     res = await async_client.post(
         f"/api/v1/invoices/{inv_id}/payments",
@@ -337,7 +360,9 @@ async def test_doctor_cannot_record_payment(async_client: AsyncClient, skin_invo
 
 
 @pytest.mark.asyncio
-async def test_concurrent_payments_no_overpay(async_client: AsyncClient, skin_invoice, reception_headers):
+async def test_concurrent_payments_no_overpay(
+    async_client: AsyncClient, skin_invoice, reception_headers
+):
     inv_id = skin_invoice["invoice"]["id"]
     # Total balance is ₹700.
     # First payment of ₹500 succeeds, reducing balance to ₹200.
@@ -358,14 +383,18 @@ async def test_concurrent_payments_no_overpay(async_client: AsyncClient, skin_in
     assert res2.json()["code"] == "PAYMENT_EXCEEDS_BALANCE"
 
     # Check invoice balance is exactly ₹200 and paid is ₹500, preventing any overpayment
-    inv_res = await async_client.get(f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers)
+    inv_res = await async_client.get(
+        f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers
+    )
     inv = inv_res.json()["items"][0]
     assert inv["paid"] == 500.0
     assert inv["balance"] == 200.0
 
 
 @pytest.mark.asyncio
-async def test_refunds_never_edit_payments_audit_trail(async_client: AsyncClient, skin_invoice, reception_headers):
+async def test_refunds_never_edit_payments_audit_trail(
+    async_client: AsyncClient, skin_invoice, reception_headers
+):
     inv_id = skin_invoice["invoice"]["id"]
 
     # 1. Pay ₹500
@@ -386,7 +415,9 @@ async def test_refunds_never_edit_payments_audit_trail(async_client: AsyncClient
     assert ref_res.status_code == 201
 
     # 3. Fetch invoice and verify payment is completely intact (append-only)
-    inv_res = await async_client.get(f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers)
+    inv_res = await async_client.get(
+        f"/api/v1/invoices?patientId={skin_invoice['patientId']}", headers=reception_headers
+    )
     inv = inv_res.json()["items"][0]
     assert len(inv["payments"]) >= 1
     orig_pay = next(p for p in inv["payments"] if p["id"] == payment_id)
@@ -394,4 +425,3 @@ async def test_refunds_never_edit_payments_audit_trail(async_client: AsyncClient
     assert len(inv["refunds"]) >= 1
     orig_ref = next(r for r in inv["refunds"] if r["id"] == ref_res.json()["id"])
     assert orig_ref["amount"] == 200.0
-

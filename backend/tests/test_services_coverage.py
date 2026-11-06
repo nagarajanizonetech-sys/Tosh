@@ -65,10 +65,22 @@ def test_magic_bytes_validation():
     from app.services.storage import validate_file_magic_bytes
 
     # Valid formats
-    assert validate_file_magic_bytes(b"\xff\xd8\xff\xe0\x00\x10", "doc.jpg") == ("image/jpeg", ".jpg")
-    assert validate_file_magic_bytes(b"\x89PNG\r\n\x1a\n\x00\x00", "doc.png") == ("image/png", ".png")
-    assert validate_file_magic_bytes(b"RIFF\x00\x00\x00\x00WEBPtest", "doc.webp") == ("image/webp", ".webp")
-    assert validate_file_magic_bytes(b"%PDF-1.5 test file", "doc.pdf") == ("application/pdf", ".pdf")
+    assert validate_file_magic_bytes(b"\xff\xd8\xff\xe0\x00\x10", "doc.jpg") == (
+        "image/jpeg",
+        ".jpg",
+    )
+    assert validate_file_magic_bytes(b"\x89PNG\r\n\x1a\n\x00\x00", "doc.png") == (
+        "image/png",
+        ".png",
+    )
+    assert validate_file_magic_bytes(b"RIFF\x00\x00\x00\x00WEBPtest", "doc.webp") == (
+        "image/webp",
+        ".webp",
+    )
+    assert validate_file_magic_bytes(b"%PDF-1.5 test file", "doc.pdf") == (
+        "application/pdf",
+        ".pdf",
+    )
 
     # Corrupted / short
     with pytest.raises(FileRejectedException):
@@ -85,6 +97,7 @@ def test_magic_bytes_validation():
 
 def test_get_storage_service_factory():
     import app.services.storage as storage_mod
+
     storage_mod._storage_instance = None
     with patch("app.core.config.settings.STORAGE_BACKEND", "local"):
         svc = storage_mod.get_storage_service()
@@ -136,12 +149,13 @@ async def test_reminder_status_never_sent_without_provider_confirmation(db_sessi
     mock_failing_provider = AsyncMock()
     mock_failing_provider.send_reminder.return_value = (False, None)
 
-    with patch("app.modules.followups.router.get_notification_provider", return_value=mock_failing_provider):
+    with patch(
+        "app.modules.followups.router.get_notification_provider", return_value=mock_failing_provider
+    ):
         # Even if send_reminder returns False, status must not be 'Sent'
         success, msg_id = await mock_failing_provider.send_reminder("123", "msg", "manual")
         assert success is False
         assert msg_id is None
-
 
 
 @pytest.mark.asyncio
@@ -227,6 +241,8 @@ async def test_process_scheduled_reminders(db_session: AsyncSession):
 
 @pytest.mark.asyncio
 async def test_run_reminder_processing_job():
-    with patch("app.services.scheduler.process_scheduled_reminders", new_callable=AsyncMock) as mock_proc:
+    with patch(
+        "app.services.scheduler.process_scheduled_reminders", new_callable=AsyncMock
+    ) as mock_proc:
         await run_reminder_processing_job()
         mock_proc.assert_called_once()

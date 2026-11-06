@@ -1,8 +1,11 @@
 import uuid
 
+import structlog
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = structlog.get_logger("tosh.followups")
 
 from app.core.errors import ForbiddenException, NotFoundException
 from app.core.tokens import next_display_id
@@ -29,7 +32,9 @@ require_staff = require_role("reception", "skin", "orthopaedics")
 async def find_followup_by_id(db: AsyncSession, identifier: str) -> FollowUp | None:
     try:
         val_uuid = uuid.UUID(identifier)
-        stmt = select(FollowUp).where(or_(FollowUp.id == val_uuid, FollowUp.display_id == identifier))
+        stmt = select(FollowUp).where(
+            or_(FollowUp.id == val_uuid, FollowUp.display_id == identifier)
+        )
     except ValueError:
         stmt = select(FollowUp).where(FollowUp.display_id == identifier)
     res = await db.execute(stmt)
@@ -110,7 +115,12 @@ async def list_follow_ups(
     )
 
 
-@router.post("", response_model=FollowUpResponse, status_code=status.HTTP_201_CREATED, summary="Create follow-up")
+@router.post(
+    "",
+    response_model=FollowUpResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create follow-up",
+)
 async def create_follow_up(
     payload: CreateFollowUpRequest,
     request: Request,
@@ -166,20 +176,28 @@ async def create_follow_up(
     await db.refresh(fu)
 
     try:
-        from app.core.websocket import manager as ws_manager
-        await ws_manager.broadcast("FOLLOWUP_CREATED", {
-            "id": fu.display_id,
-            "status": fu.status,
-            "date": fu.date,
-            "department": fu.department,
-        })
-    except Exception:
-        pass
+        from app.core.websocket import ws_manager
+
+        await ws_manager.broadcast(
+            "FOLLOWUP_CREATED",
+            {
+                "id": fu.display_id,
+                "status": fu.status,
+                "date": fu.date,
+                "department": fu.department,
+            },
+        )
+    except (RuntimeError, OSError, ConnectionError) as ws_err:
+        logger.debug("followup_broadcast_failed", error=str(ws_err))
 
     return to_followup_response(fu)
 
 
-@router.patch("/{followup_id}", response_model=FollowUpResponse, summary="Update follow-up or trigger reminder")
+@router.patch(
+    "/{followup_id}",
+    response_model=FollowUpResponse,
+    summary="Update follow-up or trigger reminder",
+)
 async def update_follow_up(
     followup_id: str,
     payload: UpdateFollowUpRequest,
@@ -249,14 +267,18 @@ async def update_follow_up(
     await db.refresh(fu)
 
     try:
-        from app.core.websocket import manager as ws_manager
-        await ws_manager.broadcast("FOLLOWUP_CREATED", {
-            "id": fu.display_id,
-            "status": fu.status,
-            "date": fu.date,
-            "department": fu.department,
-        })
-    except Exception:
-        pass
+        from app.core.websocket import ws_manager
+
+        await ws_manager.broadcast(
+            "FOLLOWUP_CREATED",
+            {
+                "id": fu.display_id,
+                "status": fu.status,
+                "date": fu.date,
+                "department": fu.department,
+            },
+        )
+    except (RuntimeError, OSError, ConnectionError) as ws_err:
+        logger.debug("followup_broadcast_failed", error=str(ws_err))
 
     return to_followup_response(fu)

@@ -40,9 +40,7 @@ async def get_current_user(
 def require_role(*allowed_roles: str) -> Callable[[User], User]:
     def dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in allowed_roles:
-            raise ForbiddenException(
-                f"Action not permitted for your role: {user.role}"
-            )
+            raise ForbiddenException(f"Action not permitted for your role: {user.role}")
         return user
 
     return dependency

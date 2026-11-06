@@ -1,8 +1,9 @@
 import asyncio
 import sys
-from typing import Any
 
+import structlog
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -13,88 +14,383 @@ from app.modules.catalog.models import BodyRegionTemplate, ChargeCatalogItem
 from app.modules.settings.models import FeeSetting
 from app.modules.users.models import Doctor, User
 
+logger = structlog.get_logger(__name__)
+
 
 CATALOG_ITEMS = [
-    {"display_id": "CHG-101", "name": "Triamcinolone (Kenacort) Steroid Injection", "category": "Injection", "price": 85000, "unit": "per dose", "department": "skin"},
-    {"display_id": "CHG-102", "name": "Glutathione Skin Brightening Injection", "category": "Injection", "price": 250000, "unit": "per session", "department": "skin"},
-    {"display_id": "CHG-103", "name": "Botox Botulinum Toxin Injection", "category": "Injection", "price": 400000, "unit": "per area", "department": "skin"},
-    {"display_id": "CHG-104", "name": "Local Anaesthetic Lidocaine 2% Injection", "category": "Injection", "price": 25000, "unit": "per vial", "department": "all"},
-    {"display_id": "CHG-105", "name": "Biotin / Hair Growth Peptide Injection", "category": "Injection", "price": 140000, "unit": "per dose", "department": "skin"},
-    {"display_id": "CHG-201", "name": "Sterile Cotton Roll / Cotton Pack", "category": "Consumable", "price": 5000, "unit": "pack", "department": "all"},
-    {"display_id": "CHG-202", "name": "Sterile Gauze & Surgical Dressing Pack", "category": "Consumable", "price": 12000, "unit": "set", "department": "all"},
-    {"display_id": "CHG-203", "name": "Disposable Syringe & 30G Needle Pack", "category": "Consumable", "price": 6000, "unit": "set of 2", "department": "all"},
-    {"display_id": "CHG-204", "name": "Micropore Surgical Tape & Bandage", "category": "Consumable", "price": 8000, "unit": "roll", "department": "all"},
-    {"display_id": "CHG-205", "name": "Betadine Antiseptic Cleansing Solution", "category": "Consumable", "price": 10000, "unit": "application", "department": "all"},
-    {"display_id": "CHG-206", "name": "Biopsy Punch Disposable Tool (3mm / 4mm)", "category": "Consumable", "price": 35000, "unit": "per piece", "department": "skin"},
-    {"display_id": "CHG-207", "name": "Surgical Latex Gloves & Disposable Drapes", "category": "Consumable", "price": 9000, "unit": "pair", "department": "all"},
-    {"display_id": "CHG-301", "name": "Chemical Peel (Salicylic / Glycolic Acid)", "category": "Procedure", "price": 180000, "unit": "full face", "department": "skin"},
-    {"display_id": "CHG-302", "name": "Comedone / Acne Extraction Session", "category": "Procedure", "price": 85000, "unit": "per session", "department": "skin"},
-    {"display_id": "CHG-303", "name": "Electrocautery Wart / Skin Tag Removal", "category": "Procedure", "price": 150000, "unit": "up to 5 lesions", "department": "skin"},
-    {"display_id": "CHG-304", "name": "Cryotherapy (Liquid Nitrogen Spray)", "category": "Procedure", "price": 120000, "unit": "per lesion area", "department": "skin"},
-    {"display_id": "CHG-305", "name": "Skin Punch Biopsy Procedure", "category": "Procedure", "price": 220000, "unit": "including specimen prep", "department": "skin"},
-    {"display_id": "CHG-306", "name": "Dermabrasion / Hydrafacial Treatment", "category": "Procedure", "price": 280000, "unit": "per sitting", "department": "skin"},
-    {"display_id": "CHG-307", "name": "Laser Skin Rejuvenation / Pigment Reduction", "category": "Procedure", "price": 350000, "unit": "per sitting", "department": "skin"},
+    {
+        "display_id": "CHG-101",
+        "name": "Triamcinolone (Kenacort) Steroid Injection",
+        "category": "Injection",
+        "price": 85000,
+        "unit": "per dose",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-102",
+        "name": "Glutathione Skin Brightening Injection",
+        "category": "Injection",
+        "price": 250000,
+        "unit": "per session",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-103",
+        "name": "Botox Botulinum Toxin Injection",
+        "category": "Injection",
+        "price": 400000,
+        "unit": "per area",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-104",
+        "name": "Local Anaesthetic Lidocaine 2% Injection",
+        "category": "Injection",
+        "price": 25000,
+        "unit": "per vial",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-105",
+        "name": "Biotin / Hair Growth Peptide Injection",
+        "category": "Injection",
+        "price": 140000,
+        "unit": "per dose",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-201",
+        "name": "Sterile Cotton Roll / Cotton Pack",
+        "category": "Consumable",
+        "price": 5000,
+        "unit": "pack",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-202",
+        "name": "Sterile Gauze & Surgical Dressing Pack",
+        "category": "Consumable",
+        "price": 12000,
+        "unit": "set",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-203",
+        "name": "Disposable Syringe & 30G Needle Pack",
+        "category": "Consumable",
+        "price": 6000,
+        "unit": "set of 2",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-204",
+        "name": "Micropore Surgical Tape & Bandage",
+        "category": "Consumable",
+        "price": 8000,
+        "unit": "roll",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-205",
+        "name": "Betadine Antiseptic Cleansing Solution",
+        "category": "Consumable",
+        "price": 10000,
+        "unit": "application",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-206",
+        "name": "Biopsy Punch Disposable Tool (3mm / 4mm)",
+        "category": "Consumable",
+        "price": 35000,
+        "unit": "per piece",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-207",
+        "name": "Surgical Latex Gloves & Disposable Drapes",
+        "category": "Consumable",
+        "price": 9000,
+        "unit": "pair",
+        "department": "all",
+    },
+    {
+        "display_id": "CHG-301",
+        "name": "Chemical Peel (Salicylic / Glycolic Acid)",
+        "category": "Procedure",
+        "price": 180000,
+        "unit": "full face",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-302",
+        "name": "Comedone / Acne Extraction Session",
+        "category": "Procedure",
+        "price": 85000,
+        "unit": "per session",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-303",
+        "name": "Electrocautery Wart / Skin Tag Removal",
+        "category": "Procedure",
+        "price": 150000,
+        "unit": "up to 5 lesions",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-304",
+        "name": "Cryotherapy (Liquid Nitrogen Spray)",
+        "category": "Procedure",
+        "price": 120000,
+        "unit": "per lesion area",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-305",
+        "name": "Skin Punch Biopsy Procedure",
+        "category": "Procedure",
+        "price": 220000,
+        "unit": "including specimen prep",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-306",
+        "name": "Dermabrasion / Hydrafacial Treatment",
+        "category": "Procedure",
+        "price": 280000,
+        "unit": "per sitting",
+        "department": "skin",
+    },
+    {
+        "display_id": "CHG-307",
+        "name": "Laser Skin Rejuvenation / Pigment Reduction",
+        "category": "Procedure",
+        "price": 350000,
+        "unit": "per sitting",
+        "department": "skin",
+    },
 ]
 
 BODY_REGION_TEMPLATES = [
     {
         "region": "Knee",
-        "fields": ["Range of motion", "Stability (Lachman / Pivot / Collateral)", "Swelling / effusion", "Gait / weight bearing", "Joint line tenderness", "Patellofemoral tracking"],
+        "fields": [
+            "Range of motion",
+            "Stability (Lachman / Pivot / Collateral)",
+            "Swelling / effusion",
+            "Gait / weight bearing",
+            "Joint line tenderness",
+            "Patellofemoral tracking",
+        ],
         "medications": [
-            {"id": "knee-med-1", "medicineName": "Tab. Aceclofenac + Paracetamol", "strength": "100mg / 325mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "5 Days", "instructions": "Take after meals (Pain & anti-inflammatory)"},
-            {"id": "knee-med-2", "medicineName": "Tab. Pantoprazole", "strength": "40mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Once daily (OD)", "duration": "5 Days", "instructions": "Take in morning on empty stomach"},
-            {"id": "knee-med-3", "medicineName": "Tab. Thiocolchicoside", "strength": "4mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "5 Days", "instructions": "Take after meals (Muscle relaxant)"},
+            {
+                "id": "knee-med-1",
+                "medicineName": "Tab. Aceclofenac + Paracetamol",
+                "strength": "100mg / 325mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "5 Days",
+                "instructions": "Take after meals (Pain & anti-inflammatory)",
+            },
+            {
+                "id": "knee-med-2",
+                "medicineName": "Tab. Pantoprazole",
+                "strength": "40mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Once daily (OD)",
+                "duration": "5 Days",
+                "instructions": "Take in morning on empty stomach",
+            },
+            {
+                "id": "knee-med-3",
+                "medicineName": "Tab. Thiocolchicoside",
+                "strength": "4mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "5 Days",
+                "instructions": "Take after meals (Muscle relaxant)",
+            },
         ],
     },
     {
         "region": "Shoulder",
-        "fields": ["Range of motion (Abduction / Flexion / Rotation)", "Rotator cuff strength (Empty can / Hawkins)", "Tenderness / impingement", "Functional movement / overhead reach", "Biceps tendon stability", "Scapular rhythm"],
+        "fields": [
+            "Range of motion (Abduction / Flexion / Rotation)",
+            "Rotator cuff strength (Empty can / Hawkins)",
+            "Tenderness / impingement",
+            "Functional movement / overhead reach",
+            "Biceps tendon stability",
+            "Scapular rhythm",
+        ],
         "medications": [
-            {"id": "shoulder-med-1", "medicineName": "Tab. Etoricoxib", "strength": "90mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Once daily (OD)", "duration": "5 Days", "instructions": "Take after breakfast (Anti-inflammatory)"},
-            {"id": "shoulder-med-2", "medicineName": "Tab. Rabeprazole", "strength": "20mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Once daily (OD)", "duration": "5 Days", "instructions": "Take 30 mins before breakfast"},
+            {
+                "id": "shoulder-med-1",
+                "medicineName": "Tab. Etoricoxib",
+                "strength": "90mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Once daily (OD)",
+                "duration": "5 Days",
+                "instructions": "Take after breakfast (Anti-inflammatory)",
+            },
+            {
+                "id": "shoulder-med-2",
+                "medicineName": "Tab. Rabeprazole",
+                "strength": "20mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Once daily (OD)",
+                "duration": "5 Days",
+                "instructions": "Take 30 mins before breakfast",
+            },
         ],
     },
     {
         "region": "Spine",
-        "fields": ["Region / level (Cervical / Lumbar / Dorsal)", "Range of motion (Flexion / Extension / Lateral)", "Neurological examination (SLR / Motor / Sensory / Reflexes)", "Paraspinal tenderness / spasm", "Radicular symptoms / Sciatica", "Posture / gait"],
+        "fields": [
+            "Region / level (Cervical / Lumbar / Dorsal)",
+            "Range of motion (Flexion / Extension / Lateral)",
+            "Neurological examination (SLR / Motor / Sensory / Reflexes)",
+            "Paraspinal tenderness / spasm",
+            "Radicular symptoms / Sciatica",
+            "Posture / gait",
+        ],
         "medications": [
-            {"id": "spine-med-1", "medicineName": "Tab. Aceclofenac + Paracetamol + Chlorzoxazone", "strength": "100 / 325 / 250mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "7 Days", "instructions": "Take after meals (Spinal pain & relaxant)"},
-            {"id": "spine-med-2", "medicineName": "Tab. Pantoprazole", "strength": "40mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Once daily (OD)", "duration": "7 Days", "instructions": "Take in morning on empty stomach"},
+            {
+                "id": "spine-med-1",
+                "medicineName": "Tab. Aceclofenac + Paracetamol + Chlorzoxazone",
+                "strength": "100 / 325 / 250mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "7 Days",
+                "instructions": "Take after meals (Spinal pain & relaxant)",
+            },
+            {
+                "id": "spine-med-2",
+                "medicineName": "Tab. Pantoprazole",
+                "strength": "40mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Once daily (OD)",
+                "duration": "7 Days",
+                "instructions": "Take in morning on empty stomach",
+            },
         ],
     },
     {
         "region": "Hip",
-        "fields": ["Range of motion (Flexion / Rotation / Abduction)", "Gait / Trendelenburg test", "Tenderness / groin pain", "Functional movement / squatting", "Leg length discrepancy", "Trochanteric bursitis assessment"],
+        "fields": [
+            "Range of motion (Flexion / Rotation / Abduction)",
+            "Gait / Trendelenburg test",
+            "Tenderness / groin pain",
+            "Functional movement / squatting",
+            "Leg length discrepancy",
+            "Trochanteric bursitis assessment",
+        ],
         "medications": [
-            {"id": "hip-med-1", "medicineName": "Tab. Etodolac + Paracetamol", "strength": "400mg / 325mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "7 Days", "instructions": "Take after meals (Anti-inflammatory)"},
+            {
+                "id": "hip-med-1",
+                "medicineName": "Tab. Etodolac + Paracetamol",
+                "strength": "400mg / 325mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "7 Days",
+                "instructions": "Take after meals (Anti-inflammatory)",
+            },
         ],
     },
     {
         "region": "Elbow",
-        "fields": ["Range of motion (Flexion / Extension / Pronation / Supination)", "Epicondylar tenderness (Tennis / Golfer elbow test)", "Stability (Collateral ligaments)", "Grip strength", "Ulnar nerve subluxation / Tinel sign"],
+        "fields": [
+            "Range of motion (Flexion / Extension / Pronation / Supination)",
+            "Epicondylar tenderness (Tennis / Golfer elbow test)",
+            "Stability (Collateral ligaments)",
+            "Grip strength",
+            "Ulnar nerve subluxation / Tinel sign",
+        ],
         "medications": [
-            {"id": "elbow-med-1", "medicineName": "Tab. Aceclofenac + Serratiopeptidase", "strength": "100mg / 15mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "5 Days", "instructions": "Take after food for tendinitis & swelling"},
+            {
+                "id": "elbow-med-1",
+                "medicineName": "Tab. Aceclofenac + Serratiopeptidase",
+                "strength": "100mg / 15mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "5 Days",
+                "instructions": "Take after food for tendinitis & swelling",
+            },
         ],
     },
     {
         "region": "Wrist & Hand",
-        "fields": ["Range of motion (Dorsiflexion / Palmar flexion / Ulnar deviation)", "Grip strength & pinch test", "Phalen & Tinel test (Carpal tunnel)", "Finkelstein test (De Quervain)", "Swelling / effusion / deformity"],
+        "fields": [
+            "Range of motion (Dorsiflexion / Palmar flexion / Ulnar deviation)",
+            "Grip strength & pinch test",
+            "Phalen & Tinel test (Carpal tunnel)",
+            "Finkelstein test (De Quervain)",
+            "Swelling / effusion / deformity",
+        ],
         "medications": [
-            {"id": "wrist-med-1", "medicineName": "Tab. Aceclofenac", "strength": "100mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "5 Days", "instructions": "Take after meals"},
+            {
+                "id": "wrist-med-1",
+                "medicineName": "Tab. Aceclofenac",
+                "strength": "100mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "5 Days",
+                "instructions": "Take after meals",
+            },
         ],
     },
     {
         "region": "Ankle & Foot",
-        "fields": ["Range of motion (Dorsiflexion / Plantar flexion / Inversion / Eversion)", "Anterior drawer & Talar tilt (Ligament stability)", "Malleolar / Achilles / Plantar fascia tenderness", "Swelling / ecchymosis / weight bearing ability", "Arch examination (Pes planus / cavus)"],
+        "fields": [
+            "Range of motion (Dorsiflexion / Plantar flexion / Inversion / Eversion)",
+            "Anterior drawer & Talar tilt (Ligament stability)",
+            "Malleolar / Achilles / Plantar fascia tenderness",
+            "Swelling / ecchymosis / weight bearing ability",
+            "Arch examination (Pes planus / cavus)",
+        ],
         "medications": [
-            {"id": "ankle-med-1", "medicineName": "Tab. Etoricoxib", "strength": "90mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Once daily (OD)", "duration": "5 Days", "instructions": "Take after breakfast for acute ligament sprain"},
+            {
+                "id": "ankle-med-1",
+                "medicineName": "Tab. Etoricoxib",
+                "strength": "90mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Once daily (OD)",
+                "duration": "5 Days",
+                "instructions": "Take after breakfast for acute ligament sprain",
+            },
         ],
     },
     {
         "region": "Other / General",
-        "fields": ["Anatomical location", "Range of motion / mobility", "Deformity / alignment", "Neurovascular status", "Relevant orthopaedic findings"],
+        "fields": [
+            "Anatomical location",
+            "Range of motion / mobility",
+            "Deformity / alignment",
+            "Neurovascular status",
+            "Relevant orthopaedic findings",
+        ],
         "medications": [
-            {"id": "other-med-1", "medicineName": "Tab. Aceclofenac + Paracetamol", "strength": "100mg / 325mg", "dosage": "1 Tab", "route": "Oral", "frequency": "Twice daily (BD)", "duration": "5 Days", "instructions": "Take after meals (Analgesic & anti-inflammatory)"},
+            {
+                "id": "other-med-1",
+                "medicineName": "Tab. Aceclofenac + Paracetamol",
+                "strength": "100mg / 325mg",
+                "dosage": "1 Tab",
+                "route": "Oral",
+                "frequency": "Twice daily (BD)",
+                "duration": "5 Days",
+                "instructions": "Take after meals (Analgesic & anti-inflammatory)",
+            },
         ],
     },
 ]
@@ -114,22 +410,26 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
     if clean:
         try:
             bind = session.bind
-            is_sqlite = (bind.dialect.name == "sqlite") if bind else settings.DATABASE_URL.startswith("sqlite")
+            is_sqlite = (
+                (bind.dialect.name == "sqlite")
+                if bind
+                else settings.DATABASE_URL.startswith("sqlite")
+            )
             if is_sqlite:
                 for table in reversed(Base.metadata.sorted_tables):
                     try:
                         await session.execute(text(f'DELETE FROM "{table.name}";'))
-                    except Exception:
-                        pass
+                    except SQLAlchemyError as exc:
+                        logger.debug("seed_table_delete_skipped", table=table.name, error=str(exc))
             else:
                 tbls = [f'"{table.name}"' for table in Base.metadata.sorted_tables]
                 try:
                     await session.execute(text(f"TRUNCATE TABLE {', '.join(tbls)} CASCADE;"))
-                except Exception:
-                    pass
+                except SQLAlchemyError as exc:
+                    logger.debug("seed_table_truncate_skipped", error=str(exc))
             await session.flush()
-        except Exception:
-            pass
+        except SQLAlchemyError as exc:
+            logger.debug("seed_clean_skipped", error=str(exc))
 
     # 2. Staff Users & Doctors
     print("Seeding staff accounts and doctors...")
@@ -139,7 +439,9 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
     ortho_pw = settings.ORTHO_INITIAL_PASSWORD or initial_pw
 
     res_users = await session.execute(
-        select(User).where(User.email.in_(["reception@gmail.com", "skin@gmail.com", "ortho@gmail.com"]))
+        select(User).where(
+            User.email.in_(["reception@gmail.com", "skin@gmail.com", "ortho@gmail.com"])
+        )
     )
     existing_users = {u.email: u for u in res_users.scalars().all()}
 
@@ -193,7 +495,9 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
 
     await session.flush()
 
-    res_docs = await session.execute(select(Doctor).where(Doctor.department.in_(["skin", "orthopaedics"])))
+    res_docs = await session.execute(
+        select(Doctor).where(Doctor.department.in_(["skin", "orthopaedics"]))
+    )
     existing_docs = {d.department: d for d in res_docs.scalars().all()}
 
     doc_skin = existing_docs.get("skin")
@@ -242,7 +546,9 @@ async def _seed_with_session(session: AsyncSession, clean: bool = False) -> None
             session.add(BodyRegionTemplate(**tmpl))
 
     await session.commit()
-    print("[SUCCESS] Database seeding successfully finished! Staff credentials and master catalog initialized.")
+    print(
+        "[SUCCESS] Database seeding successfully finished! Staff credentials and master catalog initialized."
+    )
 
 
 if __name__ == "__main__":

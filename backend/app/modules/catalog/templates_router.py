@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,11 +29,15 @@ class BodyRegionMedicationSchema(CamelModel):
 
 class BodyRegionDefinitionSchema(CamelModel):
     region: str
-    fields: list[str] = []
-    medications: list[BodyRegionMedicationSchema] = []
+    fields: list[str] = Field(default_factory=list)
+    medications: list[BodyRegionMedicationSchema] = Field(default_factory=list)
 
 
-@router.get("", response_model=list[BodyRegionDefinitionSchema], summary="Get body region clinical templates")
+@router.get(
+    "",
+    response_model=list[BodyRegionDefinitionSchema],
+    summary="Get body region clinical templates",
+)
 async def get_body_region_templates(
     db: AsyncSession = Depends(get_db),
 ) -> list[BodyRegionDefinitionSchema]:
@@ -64,7 +69,11 @@ async def get_body_region_templates(
     return output
 
 
-@router.put("", response_model=list[BodyRegionDefinitionSchema], summary="Update body region clinical templates")
+@router.put(
+    "",
+    response_model=list[BodyRegionDefinitionSchema],
+    summary="Update body region clinical templates",
+)
 async def update_body_region_templates(
     payload: list[BodyRegionDefinitionSchema],
     request: Request,

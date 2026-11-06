@@ -1,8 +1,10 @@
 import uuid
 from datetime import UTC, datetime
 
+import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import (
@@ -11,7 +13,6 @@ from app.core.errors import (
     NotFoundException,
     VisitLockedException,
 )
-from app.core.tokens import next_display_id
 from app.core.websocket import broadcast_event
 from app.db.session import get_db
 from app.modules.appointments.models import Appointment
@@ -37,6 +38,8 @@ from app.modules.users.models import Doctor, User
 from app.modules.visits.models import Visit, VitalsRecord
 from app.services.storage import get_storage_service
 
+logger = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/visits", tags=["Visits"])
 
 
@@ -46,7 +49,9 @@ async def find_visit_by_id(db: AsyncSession, identifier: str) -> Visit | None:
     ident = identifier.strip()
     try:
         val_uuid = uuid.UUID(ident)
-        stmt = select(Visit).where(or_(Visit.id == val_uuid, func.lower(Visit.display_id) == ident.lower()))
+        stmt = select(Visit).where(
+            or_(Visit.id == val_uuid, func.lower(Visit.display_id) == ident.lower())
+        )
     except ValueError:
         stmt = select(Visit).where(func.lower(Visit.display_id) == ident.lower())
     res = await db.execute(stmt)
@@ -82,7 +87,11 @@ async def build_consultation_response(
     patient_display_id = pat_res.scalar_one_or_none() or str(visit.patient_id)
 
     # 1. Vitals
-    v_stmt = select(VitalsRecord).where(VitalsRecord.visit_id == visit.id).order_by(VitalsRecord.entered_at.desc())
+    v_stmt = (
+        select(VitalsRecord)
+        .where(VitalsRecord.visit_id == visit.id)
+        .order_by(VitalsRecord.entered_at.desc())
+    )
     v_res = await db.execute(v_stmt)
     v_rec = v_res.scalar_one_or_none()
     vitals_data = VitalsSchema(
@@ -95,7 +104,11 @@ async def build_consultation_response(
     )
 
     # 2. Prescriptions
-    rx_stmt = select(PrescriptionItem).where(PrescriptionItem.consultation_id == consultation.id).order_by(PrescriptionItem.sort_order)
+    rx_stmt = (
+        select(PrescriptionItem)
+        .where(PrescriptionItem.consultation_id == consultation.id)
+        .order_by(PrescriptionItem.sort_order)
+    )
     rx_res = await db.execute(rx_stmt)
     rx_items = rx_res.scalars().all()
     prescription_list = [
@@ -173,7 +186,11 @@ async def build_consultation_response(
     invoice = inv_res.scalar_one_or_none()
     procedures_list: list[ChargeItemSchema] = []
     if invoice:
-        chg_stmt = select(InvoiceCharge).where(InvoiceCharge.invoice_id == invoice.id).order_by(InvoiceCharge.created_at)
+        chg_stmt = (
+            select(InvoiceCharge)
+            .where(InvoiceCharge.invoice_id == invoice.id)
+            .order_by(InvoiceCharge.created_at)
+        )
         chg_res = await db.execute(chg_stmt)
         charges = chg_res.scalars().all()
         for chg in charges:
@@ -207,14 +224,18 @@ async def build_consultation_response(
         procedures=procedures_list,
         follow_up_date=consultation.follow_up_date,
         pain_location=consultation.pain_location,
-        side=consultation.side if consultation.side in ("Left", "Right", "Bilateral", "Not applicable") else None,
+        side=consultation.side
+        if consultation.side in ("Left", "Right", "Bilateral", "Not applicable")
+        else None,
         body_region_template=consultation.body_region_template,
         status="Finalized" if (consultation.status or "").lower() == "finalized" else "Draft",
         version=consultation.version or 1,
     )
 
 
-@router.get("", response_model=PaginatedConsultationsResponse, summary="List visits and consultations")
+@router.get(
+    "", response_model=PaginatedConsultationsResponse, summary="List visits and consultations"
+)
 async def list_visits(
     patient_id: str | None = Query(None, alias="patientId"),
     department: str | None = Query(None),
@@ -238,6 +259,7 @@ async def list_visits(
 
     if patient_id:
         from app.modules.patients.router import find_patient_by_id
+
         pat = await find_patient_by_id(db, patient_id)
         if pat:
             stmt = stmt.where(Visit.patient_id == pat.id)
@@ -245,7 +267,9 @@ async def list_visits(
             return PaginatedConsultationsResponse(items=[], page=page, page_size=page_size, total=0)
 
     if status and status.lower() != "all":
-        stmt = stmt.join(Consultation, Consultation.visit_id == Visit.id).where(func.lower(Consultation.status) == status.lower())
+        stmt = stmt.join(Consultation, Consultation.visit_id == Visit.id).where(
+            func.lower(Consultation.status) == status.lower()
+        )
 
     stmt = stmt.order_by(Visit.started_at.desc())
 
@@ -293,7 +317,11 @@ async def get_visit(
     doc_res = await db.execute(doc_stmt)
     doctor_display_name = doc_res.scalar_one_or_none() or "Doctor"
 
-    v_stmt = select(VitalsRecord).where(VitalsRecord.visit_id == visit.id).order_by(VitalsRecord.entered_at.desc())
+    v_stmt = (
+        select(VitalsRecord)
+        .where(VitalsRecord.visit_id == visit.id)
+        .order_by(VitalsRecord.entered_at.desc())
+    )
     v_res = await db.execute(v_stmt)
     vitals_rec = v_res.scalar_one_or_none()
     vitals_data = {}
@@ -333,7 +361,11 @@ async def get_visit(
     }
 
 
-@router.get("/{visit_id}/consultation", response_model=ConsultationResponse, summary="Get full consultation for visit")
+@router.get(
+    "/{visit_id}/consultation",
+    response_model=ConsultationResponse,
+    summary="Get full consultation for visit",
+)
 async def get_consultation(
     visit_id: str,
     request: Request,
@@ -367,7 +399,11 @@ async def get_consultation(
 require_staff = require_role("reception", "skin", "orthopaedics")
 
 
-@router.put("/{visit_id}/consultation", response_model=ConsultationResponse, summary="Save or finalize consultation")
+@router.put(
+    "/{visit_id}/consultation",
+    response_model=ConsultationResponse,
+    summary="Save or finalize consultation",
+)
 async def save_consultation(
     visit_id: str,
     payload: SaveConsultationRequest,
@@ -381,7 +417,9 @@ async def save_consultation(
 
     # Only doctor of that department may write
     if current_user.role != visit.department:
-        raise ForbiddenException(f"Only the doctor of the '{visit.department}' department can write to this consultation.")
+        raise ForbiddenException(
+            f"Only the doctor of the '{visit.department}' department can write to this consultation."
+        )
 
     consultation = await get_or_create_consultation(db, visit)
 
@@ -451,7 +489,9 @@ async def save_consultation(
 
     # Replace prescriptions atomically
     if payload.prescription is not None:
-        del_stmt = delete(PrescriptionItem).where(PrescriptionItem.consultation_id == consultation.id)
+        del_stmt = delete(PrescriptionItem).where(
+            PrescriptionItem.consultation_id == consultation.id
+        )
         await db.execute(del_stmt)
 
         for idx, item in enumerate(payload.prescription):
@@ -479,8 +519,8 @@ async def save_consultation(
     try:
         if visit.patient:
             visit.patient.latest_visit_at = visit.started_at
-    except Exception:
-        pass
+    except (AttributeError, SQLAlchemyError) as exc:
+        logger.debug("patient_latest_visit_update_skipped", error=str(exc))
 
     # Auto-link unlinked documents uploaded by this doctor for this patient to this visit
     await db.execute(
@@ -509,11 +549,14 @@ async def save_consultation(
     await db.commit()
     await db.refresh(consultation)
 
-    await broadcast_event("VISIT_UPDATE", {
-        "action": "consultation_saved",
-        "id": visit.display_id,
-        "status": consultation.status,
-    })
+    await broadcast_event(
+        "VISIT_UPDATE",
+        {
+            "action": "consultation_saved",
+            "id": visit.display_id,
+            "status": consultation.status,
+        },
+    )
 
     return await build_consultation_response(db, visit, consultation)
 
@@ -533,7 +576,11 @@ async def update_vitals(
     if current_user.role in ("skin", "orthopaedics") and visit.department != current_user.role:
         raise ForbiddenException("Clinicians cannot update vitals for other departments.")
 
-    v_stmt = select(VitalsRecord).where(VitalsRecord.visit_id == visit.id).order_by(VitalsRecord.entered_at.desc())
+    v_stmt = (
+        select(VitalsRecord)
+        .where(VitalsRecord.visit_id == visit.id)
+        .order_by(VitalsRecord.entered_at.desc())
+    )
     v_res = await db.execute(v_stmt)
     v_rec = v_res.scalar_one_or_none()
 
@@ -583,10 +630,13 @@ async def update_vitals(
     await db.commit()
     await db.refresh(v_rec)
 
-    await broadcast_event("VISIT_UPDATE", {
-        "action": "vitals_updated",
-        "id": visit.display_id,
-    })
+    await broadcast_event(
+        "VISIT_UPDATE",
+        {
+            "action": "vitals_updated",
+            "id": visit.display_id,
+        },
+    )
 
     return VitalsSchema(
         blood_pressure=v_rec.blood_pressure,

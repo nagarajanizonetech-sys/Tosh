@@ -1,5 +1,5 @@
-from datetime import UTC, datetime
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, or_, select
@@ -12,6 +12,7 @@ from app.modules.appointments.models import Appointment
 from app.modules.auth.dependencies import get_current_user, require_role
 from app.modules.billing.models import Invoice
 from app.modules.checkin.service import CheckInService
+from app.modules.consultations.models import Consultation
 from app.modules.patients.models import Patient
 from app.modules.patients.router import find_patient_by_id
 from app.modules.queue.models import QueueEntry
@@ -23,7 +24,6 @@ from app.modules.queue.schemas import (
     VitalsSchema,
 )
 from app.modules.users.models import Doctor, User
-from app.modules.consultations.models import Consultation
 from app.modules.visits.models import Visit, VitalsRecord
 
 router = APIRouter(prefix="/queue", tags=["Queue"])
@@ -38,7 +38,9 @@ VALID_QUEUE_TRANSITIONS: dict[str, set[str]] = {
 async def find_queue_entry_by_id(db: AsyncSession, identifier: str) -> QueueEntry | None:
     try:
         val_uuid = uuid.UUID(identifier)
-        stmt = select(QueueEntry).where(or_(QueueEntry.id == val_uuid, QueueEntry.display_id == identifier))
+        stmt = select(QueueEntry).where(
+            or_(QueueEntry.id == val_uuid, QueueEntry.display_id == identifier)
+        )
     except ValueError:
         stmt = select(QueueEntry).where(QueueEntry.display_id == identifier)
     res = await db.execute(stmt)
@@ -57,11 +59,15 @@ async def compute_payment_status(db: AsyncSession, visit_id: uuid.UUID | None) -
         return "Due"
     invoice_id, fee = inv_row
 
-    chg_stmt = select(func.coalesce(func.sum(InvoiceCharge.amount), 0)).where(InvoiceCharge.invoice_id == invoice_id)
+    chg_stmt = select(func.coalesce(func.sum(InvoiceCharge.amount), 0)).where(
+        InvoiceCharge.invoice_id == invoice_id
+    )
     chg_res = await db.execute(chg_stmt)
     charges_sum = int(chg_res.scalar_one())
 
-    pay_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.invoice_id == invoice_id)
+    pay_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+        Payment.invoice_id == invoice_id
+    )
     pay_res = await db.execute(pay_stmt)
     payments_sum = int(pay_res.scalar_one())
 
@@ -122,7 +128,9 @@ async def list_queue(
 ) -> PaginatedQueueResponse:
     if current_user.role in ("skin", "orthopaedics"):
         if department and department.lower() != current_user.role:
-            raise ForbiddenException("Clinicians cannot access queue entries from other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot access queue entries from other departments."
+            )
         department = current_user.role
 
     stmt = select(QueueEntry)
@@ -146,7 +154,9 @@ async def list_queue(
     total_res = await db.execute(count_stmt)
     total = total_res.scalar_one() or 0
 
-    stmt = stmt.order_by(QueueEntry.arrival_at.asc()).offset((page - 1) * page_size).limit(page_size)
+    stmt = (
+        stmt.order_by(QueueEntry.arrival_at.asc()).offset((page - 1) * page_size).limit(page_size)
+    )
     res = await db.execute(stmt)
     queue_entries = res.scalars().all()
 
@@ -154,7 +164,11 @@ async def list_queue(
     for q in queue_entries:
         pay_stat = await compute_payment_status(db, q.visit_id)
         # Load vitals if available
-        v_stmt = select(VitalsRecord).where(VitalsRecord.visit_id == q.visit_id).order_by(VitalsRecord.entered_at.desc())
+        v_stmt = (
+            select(VitalsRecord)
+            .where(VitalsRecord.visit_id == q.visit_id)
+            .order_by(VitalsRecord.entered_at.desc())
+        )
         v_res = await db.execute(v_stmt)
         vitals_rec = v_res.scalar_one_or_none()
         items.append(to_queue_entry_response(q, pay_stat, vitals_rec))
@@ -171,7 +185,12 @@ require_reception = require_role("reception")
 require_staff = require_role("reception", "skin", "orthopaedics")
 
 
-@router.post("", response_model=QueueEntryResponse, status_code=status.HTTP_201_CREATED, summary="Check-in patient to queue")
+@router.post(
+    "",
+    response_model=QueueEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Check-in patient to queue",
+)
 async def create_queue(
     payload: CreateQueueRequest,
     db: AsyncSession = Depends(get_db),
@@ -208,7 +227,9 @@ async def create_queue(
     await db.commit()
     await db.refresh(queue_entry)
 
-    await broadcast_event("QUEUE_UPDATE", {"action": "checkin", "id": queue_entry.display_id, "department": dept})
+    await broadcast_event(
+        "QUEUE_UPDATE", {"action": "checkin", "id": queue_entry.display_id, "department": dept}
+    )
 
     # Fetch vitals record
     v_stmt = select(VitalsRecord).where(VitalsRecord.visit_id == queue_entry.visit_id)
@@ -229,7 +250,10 @@ async def update_queue(
     if not queue_entry:
         raise NotFoundException(f"Queue entry with ID {queue_id} not found.")
 
-    if current_user.role in ("skin", "orthopaedics") and queue_entry.department != current_user.role:
+    if (
+        current_user.role in ("skin", "orthopaedics")
+        and queue_entry.department != current_user.role
+    ):
         raise ForbiddenException("Clinicians cannot update queue entries from other departments.")
 
     # 1. Update status if provided
@@ -335,7 +359,9 @@ async def update_queue(
             db.add(v_rec)
 
     # 7. Update patient phone / address / name if provided
-    if queue_entry.patient_id and (payload.patient_phone or payload.patient_address or payload.patient_full_name):
+    if queue_entry.patient_id and (
+        payload.patient_phone or payload.patient_address or payload.patient_full_name
+    ):
         p_stmt = select(Patient).where(Patient.id == queue_entry.patient_id)
         p_res = await db.execute(p_stmt)
         pat = p_res.scalar_one_or_none()
@@ -350,12 +376,15 @@ async def update_queue(
     await db.commit()
     await db.refresh(queue_entry)
 
-    await broadcast_event("QUEUE_UPDATE", {
-        "action": "edit",
-        "id": queue_entry.display_id,
-        "status": queue_entry.status,
-        "department": queue_entry.department,
-    })
+    await broadcast_event(
+        "QUEUE_UPDATE",
+        {
+            "action": "edit",
+            "id": queue_entry.display_id,
+            "status": queue_entry.status,
+            "department": queue_entry.department,
+        },
+    )
 
     pay_stat = await compute_payment_status(db, queue_entry.visit_id)
     v_stmt = (

@@ -1,12 +1,14 @@
 import socket
+
 import structlog
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import settings
-from app.db.base import Base
-from app.db import session as db_session
 import app.db.all_models  # noqa: F401 - Register all models with Base.metadata
+from app.core.config import settings
+from app.db import session as db_session
+from app.db.base import Base
 
 logger = structlog.get_logger("tosh.db")
 
@@ -16,7 +18,9 @@ def _is_database_port_reachable(url: str) -> bool:
     if not url or url.startswith("sqlite"):
         return True
     try:
-        netloc = url.split("@")[-1].split("/")[0] if "@" in url else url.split("://")[-1].split("/")[0]
+        netloc = (
+            url.split("@")[-1].split("/")[0] if "@" in url else url.split("://")[-1].split("/")[0]
+        )
         host = "127.0.0.1"
         port = 5432
         if ":" in netloc:
@@ -30,7 +34,7 @@ def _is_database_port_reachable(url: str) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.6)
             return s.connect_ex((host, port)) == 0
-    except Exception:
+    except (OSError, ValueError):
         return False
 
 
@@ -52,6 +56,7 @@ async def init_database() -> None:
             new_engine = create_async_engine(sqlite_url, echo=False, future=True)
             db_session.engine = new_engine
             from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
             db_session.async_session_factory = async_sessionmaker(
                 bind=new_engine,
                 class_=AsyncSession,
@@ -60,7 +65,7 @@ async def init_database() -> None:
                 autoflush=False,
             )
             connected = True
-        except Exception as e2:
+        except (SQLAlchemyError, OSError) as e2:
             logger.error("sqlite_fallback_failed", error=str(e2))
     else:
         try:
@@ -69,18 +74,25 @@ async def init_database() -> None:
             connected = True
             logger.info(
                 "database_connected",
-                target=settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else settings.DATABASE_URL,
+                target=settings.DATABASE_URL.split("@")[-1]
+                if "@" in settings.DATABASE_URL
+                else settings.DATABASE_URL,
             )
-        except Exception as exc:
+        except (SQLAlchemyError, OSError) as exc:
             logger.warning("primary_database_connection_failed", error=str(exc))
             if not is_sqlite:
-                print(f"\n[WARNING] Could not connect to PostgreSQL ({settings.DATABASE_URL}): {exc}")
-                print("[INFO] Falling back to local SQLite database (./tosh.db) so the system works immediately...\n")
+                print(
+                    f"\n[WARNING] Could not connect to PostgreSQL ({settings.DATABASE_URL}): {exc}"
+                )
+                print(
+                    "[INFO] Falling back to local SQLite database (./tosh.db) so the system works immediately...\n"
+                )
                 try:
                     sqlite_url = "sqlite+aiosqlite:///./tosh.db"
                     new_engine = create_async_engine(sqlite_url, echo=False, future=True)
                     db_session.engine = new_engine
                     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
                     db_session.async_session_factory = async_sessionmaker(
                         bind=new_engine,
                         class_=AsyncSession,
@@ -89,7 +101,7 @@ async def init_database() -> None:
                         autoflush=False,
                     )
                     connected = True
-                except Exception as e2:
+                except (SQLAlchemyError, OSError) as e2:
                     logger.error("sqlite_fallback_failed", error=str(e2))
 
     if not connected:
@@ -101,7 +113,7 @@ async def init_database() -> None:
         async with db_session.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("database_tables_verified")
-    except Exception as exc:
+    except (SQLAlchemyError, OSError) as exc:
         logger.error("database_table_creation_failed", error=str(exc))
         return
 
@@ -122,7 +134,9 @@ async def init_database() -> None:
             initial_pw = settings.RECEPTION_INITIAL_PASSWORD or "123456789"
             async with db_session.async_session_factory() as session:
                 res = await session.execute(
-                    select(User).where(User.email.in_(["reception@gmail.com", "skin@gmail.com", "ortho@gmail.com"]))
+                    select(User).where(
+                        User.email.in_(["reception@gmail.com", "skin@gmail.com", "ortho@gmail.com"])
+                    )
                 )
                 existing_staff = res.scalars().all()
                 if existing_staff:
@@ -131,5 +145,5 @@ async def init_database() -> None:
                         staff.must_change_password = False
                     await session.commit()
                     logger.info("staff_initial_passwords_synced")
-    except Exception as exc:
+    except (SQLAlchemyError, OSError, ValueError) as exc:
         logger.warning("database_seeding_check_failed", error=str(exc))

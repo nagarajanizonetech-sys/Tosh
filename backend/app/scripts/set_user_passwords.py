@@ -1,6 +1,7 @@
 import asyncio
+
 from sqlalchemy import select
-from app.core.config import settings
+
 from app.core.security import hash_password
 from app.db.session import async_session_factory
 from app.modules.users.models import User
@@ -26,4 +27,3 @@ async def update_all_users_password(new_password: str = "123456789") -> None:
 
 if __name__ == "__main__":
     asyncio.run(update_all_users_password())
-

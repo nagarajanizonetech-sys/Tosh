@@ -3,12 +3,21 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppException, ForbiddenException, NotFoundException, UnauthenticatedException
+logger = structlog.get_logger("tosh.documents")
+
+from app.core.errors import (
+    AppException,
+    ForbiddenException,
+    NotFoundException,
+    UnauthenticatedException,
+)
 from app.core.tokens import next_display_id
 from app.core.websocket import broadcast_event
 from app.db.session import get_db
@@ -41,7 +50,9 @@ async def find_document_by_id(db: AsyncSession, identifier: str) -> Document | N
             Document.deleted_at.is_(None),
         )
     except ValueError:
-        stmt = select(Document).where(Document.display_id == identifier, Document.deleted_at.is_(None))
+        stmt = select(Document).where(
+            Document.display_id == identifier, Document.deleted_at.is_(None)
+        )
     res = await db.execute(stmt)
     return res.scalar_one_or_none()
 
@@ -55,12 +66,13 @@ def to_document_response(
     if not pat_id:
         try:
             from sqlalchemy.orm import inspect
+
             ins = inspect(doc)
             if ins and not ins.unloaded and "patient" in ins.dict and doc.patient:
                 pat_id = doc.patient.display_id
             else:
                 pat_id = str(doc.patient_id)
-        except Exception:
+        except (AttributeError, KeyError, SQLAlchemyError):
             pat_id = str(doc.patient_id)
 
     return PatientDocumentResponse(
@@ -75,7 +87,12 @@ def to_document_response(
     )
 
 
-@router.post("/documents", response_model=PatientDocumentResponse, status_code=status.HTTP_201_CREATED, summary="Upload patient document")
+@router.post(
+    "/documents",
+    response_model=PatientDocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload patient document",
+)
 async def upload_document(
     request: Request,
     patient_id: str | None = Form(None, alias="patientId"),
@@ -91,7 +108,11 @@ async def upload_document(
 ) -> PatientDocumentResponse:
     effective_patient_id = (patient_id or patient_id_alt or "").strip()
     if not effective_patient_id:
-        raise AppException("patientId is required.", code="VALIDATION_ERROR", status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        raise AppException(
+            "patientId is required.",
+            code="VALIDATION_ERROR",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
 
     patient = await find_patient_by_id(db, effective_patient_id)
     if not patient:
@@ -117,20 +138,28 @@ async def upload_document(
 
         if not allowed:
             from app.modules.queue.models import QueueEntry
-            q_stmt = select(QueueEntry).where(QueueEntry.patient_id == patient.id, QueueEntry.department == current_user.role)
+
+            q_stmt = select(QueueEntry).where(
+                QueueEntry.patient_id == patient.id, QueueEntry.department == current_user.role
+            )
             q_res = await db.execute(q_stmt)
             if q_res.first():
                 allowed = True
 
         if not allowed:
             from app.modules.appointments.models import Appointment
-            apt_stmt = select(Appointment).where(Appointment.patient_id == patient.id, Appointment.department == current_user.role)
+
+            apt_stmt = select(Appointment).where(
+                Appointment.patient_id == patient.id, Appointment.department == current_user.role
+            )
             apt_res = await db.execute(apt_stmt)
             if apt_res.first():
                 allowed = True
 
         if not allowed:
-            raise ForbiddenException("Clinicians cannot upload documents for patients of other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot upload documents for patients of other departments."
+            )
 
     content = await file.read()
     mime_type, ext = validate_file_magic_bytes(content, file.filename or "upload")
@@ -200,14 +229,28 @@ async def upload_document(
     await db.commit()
     await db.refresh(doc)
 
-    await broadcast_event("document:created", {"document_id": doc.display_id, "patient_id": patient.display_id, "visit_id": str(doc.visit_id) if doc.visit_id else None})
-    await broadcast_event("visit:updated", {"patient_id": patient.display_id, "visit_id": str(doc.visit_id) if doc.visit_id else None})
+    await broadcast_event(
+        "document:created",
+        {
+            "document_id": doc.display_id,
+            "patient_id": patient.display_id,
+            "visit_id": str(doc.visit_id) if doc.visit_id else None,
+        },
+    )
+    await broadcast_event(
+        "visit:updated",
+        {"patient_id": patient.display_id, "visit_id": str(doc.visit_id) if doc.visit_id else None},
+    )
 
     signed_url = storage_service.get_signed_url(doc.storage_key)
     return to_document_response(doc, signed_url, patient_display_id=patient.display_id)
 
 
-@router.get("/patients/{patient_id}/documents", response_model=PaginatedDocumentsResponse, summary="List patient documents")
+@router.get(
+    "/patients/{patient_id}/documents",
+    response_model=PaginatedDocumentsResponse,
+    summary="List patient documents",
+)
 async def list_patient_documents(
     patient_id: str,
     request: Request,
@@ -227,7 +270,9 @@ async def list_patient_documents(
         vis_res = await db.execute(vis_stmt)
         depts = list(vis_res.scalars().all())
         if depts and current_user.role not in depts:
-            raise ForbiddenException("Clinicians cannot view documents for patients of other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot view documents for patients of other departments."
+            )
 
     stmt = (
         select(Document)
@@ -259,7 +304,9 @@ async def list_patient_documents(
     total_res = await db.execute(count_stmt)
     total = total_res.scalar_one() or 0
 
-    stmt = stmt.order_by(Document.uploaded_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    stmt = (
+        stmt.order_by(Document.uploaded_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
     res = await db.execute(stmt)
     docs = res.scalars().all()
 
@@ -289,7 +336,11 @@ async def list_patient_documents(
     )
 
 
-@router.delete("/documents/{document_id}", status_code=status.HTTP_200_OK, summary="Delete patient document (soft delete)")
+@router.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete patient document (soft delete)",
+)
 async def delete_document(
     document_id: str,
     request: Request,
@@ -311,7 +362,9 @@ async def delete_document(
             doc_dept = u_res.scalar_one_or_none()
 
         if doc_dept and doc_dept != current_user.role:
-            raise ForbiddenException("Clinicians cannot delete documents belonging to another department.")
+            raise ForbiddenException(
+                "Clinicians cannot delete documents belonging to another department."
+            )
 
     doc.deleted_at = datetime.now(UTC)
 
@@ -328,13 +381,30 @@ async def delete_document(
     )
     await db.commit()
 
-    await broadcast_event("document:deleted", {"document_id": doc.display_id, "patient_id": str(doc.patient_id), "visit_id": str(doc.visit_id) if doc.visit_id else None})
-    await broadcast_event("visit:updated", {"patient_id": str(doc.patient_id), "visit_id": str(doc.visit_id) if doc.visit_id else None})
+    await broadcast_event(
+        "document:deleted",
+        {
+            "document_id": doc.display_id,
+            "patient_id": str(doc.patient_id),
+            "visit_id": str(doc.visit_id) if doc.visit_id else None,
+        },
+    )
+    await broadcast_event(
+        "visit:updated",
+        {
+            "patient_id": str(doc.patient_id),
+            "visit_id": str(doc.visit_id) if doc.visit_id else None,
+        },
+    )
 
     return {"message": "Document deleted successfully."}
 
 
-@router.patch("/documents/{document_id}", response_model=PatientDocumentResponse, summary="Rename patient document")
+@router.patch(
+    "/documents/{document_id}",
+    response_model=PatientDocumentResponse,
+    summary="Rename patient document",
+)
 async def rename_document(
     document_id: str,
     payload: RenameDocumentRequest,
@@ -357,11 +427,17 @@ async def rename_document(
             doc_dept = u_res.scalar_one_or_none()
 
         if doc_dept and doc_dept != current_user.role:
-            raise ForbiddenException("Clinicians cannot rename documents belonging to another department.")
+            raise ForbiddenException(
+                "Clinicians cannot rename documents belonging to another department."
+            )
 
     target_name = (payload.name or payload.doc_name or payload.new_name or "").strip()
     if not target_name:
-        raise AppException("Document name cannot be empty.", code="VALIDATION_ERROR", status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        raise AppException(
+            "Document name cannot be empty.",
+            code="VALIDATION_ERROR",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
 
     orig_ext = Path(doc.name).suffix
     if orig_ext and not target_name.lower().endswith(orig_ext.lower()):
@@ -387,8 +463,22 @@ async def rename_document(
     await db.commit()
     await db.refresh(doc)
 
-    await broadcast_event("document:updated", {"document_id": doc.display_id, "name": doc.name, "patient_id": str(doc.patient_id), "visit_id": str(doc.visit_id) if doc.visit_id else None})
-    await broadcast_event("visit:updated", {"patient_id": str(doc.patient_id), "visit_id": str(doc.visit_id) if doc.visit_id else None})
+    await broadcast_event(
+        "document:updated",
+        {
+            "document_id": doc.display_id,
+            "name": doc.name,
+            "patient_id": str(doc.patient_id),
+            "visit_id": str(doc.visit_id) if doc.visit_id else None,
+        },
+    )
+    await broadcast_event(
+        "visit:updated",
+        {
+            "patient_id": str(doc.patient_id),
+            "visit_id": str(doc.visit_id) if doc.visit_id else None,
+        },
+    )
 
     storage_service = get_storage_service()
     signed_url = storage_service.get_signed_url(doc.storage_key)
@@ -427,12 +517,13 @@ async def get_document_file(
             raw_token = auth_header[7:].strip()
         if raw_token:
             from app.core.security import decode_access_token
+
             try:
                 payload = decode_access_token(raw_token)
                 if payload and "sub" in payload:
                     authorized = True
-            except Exception:
-                pass
+            except (AppException, ValueError, KeyError) as auth_err:
+                logger.debug("document_token_decode_failed", error=str(auth_err))
 
     if not authorized:
         raise UnauthenticatedException("Signed URL has expired or has an invalid signature.")
@@ -443,41 +534,49 @@ async def get_document_file(
     raw_tok = token or (auth_header[7:].strip() if auth_header.startswith("Bearer ") else None)
     if raw_tok:
         from app.core.security import decode_access_token
+
         try:
             tok_payload = decode_access_token(raw_tok)
             if tok_payload:
                 caller_role = tok_payload.get("role")
-        except Exception:
-            pass
+        except (AppException, ValueError, KeyError) as auth_err:
+            logger.debug("document_role_token_decode_failed", error=str(auth_err))
 
     if caller_role in ("skin", "orthopaedics"):
-        doc_chk_stmt = (
-            select(Document)
-            .where(Document.storage_key == clean_key, Document.deleted_at.is_(None))
+        doc_chk_stmt = select(Document).where(
+            Document.storage_key == clean_key, Document.deleted_at.is_(None)
         )
         doc_chk = (await db.execute(doc_chk_stmt)).scalar_one_or_none()
         if doc_chk:
             doc_dept = None
             if doc_chk.visit_id:
-                v_res = await db.execute(select(Visit.department).where(Visit.id == doc_chk.visit_id))
+                v_res = await db.execute(
+                    select(Visit.department).where(Visit.id == doc_chk.visit_id)
+                )
                 doc_dept = v_res.scalar_one_or_none()
             elif doc_chk.uploaded_by:
                 u_res = await db.execute(select(User.role).where(User.id == doc_chk.uploaded_by))
                 doc_dept = u_res.scalar_one_or_none()
 
             if doc_dept and doc_dept != caller_role:
-                raise ForbiddenException("Clinicians cannot access documents belonging to another department.")
+                raise ForbiddenException(
+                    "Clinicians cannot access documents belonging to another department."
+                )
 
     # 2. Retrieve document bytes
     try:
         data, content_type = await storage.get_object(clean_key)
     except FileNotFoundError:
         raise NotFoundException(f"Document file {clean_key} not found on server.")
-    except Exception:
+    except (OSError, RuntimeError) as exc:
+        logger.error("document_retrieval_failed", key=clean_key, error=str(exc))
         raise NotFoundException(f"Document file {clean_key} could not be retrieved.")
 
     filename = clean_key
-    if not filename.endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp")) and content_type == "application/pdf":
+    if (
+        not filename.endswith((".pdf", ".png", ".jpg", ".jpeg", ".webp"))
+        and content_type == "application/pdf"
+    ):
         filename = f"{filename}.pdf"
 
     file_size = len(data)
@@ -526,7 +625,7 @@ async def get_document_file(
 
             end = min(end, file_size - 1)
             content_length = end - start + 1
-            sliced_data = data[start:end + 1]
+            sliced_data = data[start : end + 1]
 
             range_headers = {
                 **base_headers,

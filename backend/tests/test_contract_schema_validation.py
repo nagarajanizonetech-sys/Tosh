@@ -13,7 +13,9 @@ def assert_camel_case_keys(data: dict | list, path: str = ""):
     if isinstance(data, dict):
         for k, v in data.items():
             current_path = f"{path}.{k}" if path else k
-            assert CAMEL_CASE_REGEX.match(k), f"Key '{k}' at path '{current_path}' is not camelCase!"
+            assert CAMEL_CASE_REGEX.match(k), (
+                f"Key '{k}' at path '{current_path}' is not camelCase!"
+            )
             assert_camel_case_keys(v, current_path)
     elif isinstance(data, list):
         for idx, item in enumerate(data):
@@ -44,7 +46,14 @@ async def test_auth_contract(async_client: AsyncClient, seed_test_users):
     assert isinstance(data["accessToken"], str)
     assert isinstance(data["tokenType"], str)
     user = data["user"]
-    assert set(user.keys()) == {"id", "email", "displayName", "role", "department", "mustChangePassword"}
+    assert set(user.keys()) == {
+        "id",
+        "email",
+        "displayName",
+        "role",
+        "department",
+        "mustChangePassword",
+    }
     assert user["role"] in {"reception", "skin", "orthopaedics"}
 
 
@@ -69,8 +78,17 @@ async def test_patients_contract(async_client: AsyncClient, auth_headers):
 
     # Required contract keys from src/types/domain.ts
     expected_keys = {
-        "id", "fullName", "dateOfBirth", "gender", "phone", "email",
-        "address", "emergencyContact", "departments", "registeredAt", "latestVisitAt"
+        "id",
+        "fullName",
+        "dateOfBirth",
+        "gender",
+        "phone",
+        "email",
+        "address",
+        "emergencyContact",
+        "departments",
+        "registeredAt",
+        "latestVisitAt",
     }
     assert set(patient.keys()) == expected_keys
     assert patient["gender"] in {"Female", "Male", "Other", "Prefer not to say"}
@@ -122,9 +140,25 @@ async def test_appointments_contract(async_client: AsyncClient, auth_headers):
     apt = apt_res.json()
     assert_camel_case_keys(apt)
 
-    expected_keys = {"id", "patientId", "department", "doctor", "startsAt", "visitType", "note", "status"}
+    expected_keys = {
+        "id",
+        "patientId",
+        "department",
+        "doctor",
+        "startsAt",
+        "visitType",
+        "note",
+        "status",
+    }
     assert set(apt.keys()) == expected_keys
-    assert apt["status"] in {"Scheduled", "Checked-in", "In progress", "Completed", "Cancelled", "No-show"}
+    assert apt["status"] in {
+        "Scheduled",
+        "Checked-in",
+        "In progress",
+        "Completed",
+        "Cancelled",
+        "No-show",
+    }
     assert apt["visitType"] in {"New", "Follow-up", "Walk-in"}
     assert apt["department"] in {"skin", "orthopaedics"}
 
@@ -171,8 +205,18 @@ async def test_queue_contract(async_client: AsyncClient, auth_headers):
     assert_camel_case_keys(q)
 
     expected_keys = {
-        "id", "token", "patientId", "visitId", "department", "doctor",
-        "arrivalAt", "status", "paymentStatus", "visitType", "note", "vitals"
+        "id",
+        "token",
+        "patientId",
+        "visitId",
+        "department",
+        "doctor",
+        "arrivalAt",
+        "status",
+        "paymentStatus",
+        "visitType",
+        "note",
+        "vitals",
     }
     assert set(q.keys()) == expected_keys
     assert q["status"] in {"Waiting", "Consulting", "Completed"}
@@ -180,4 +224,11 @@ async def test_queue_contract(async_client: AsyncClient, auth_headers):
     assert q["visitType"] in {"New", "Follow-up", "Walk-in"}
 
     vitals = q["vitals"]
-    assert set(vitals.keys()) == {"bloodPressure", "pulse", "temperature", "height", "weight", "oxygenSaturation"}
+    assert set(vitals.keys()) == {
+        "bloodPressure",
+        "pulse",
+        "temperature",
+        "height",
+        "weight",
+        "oxygenSaturation",
+    }

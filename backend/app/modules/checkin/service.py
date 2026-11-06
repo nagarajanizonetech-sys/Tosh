@@ -74,12 +74,16 @@ class CheckInService:
         vitals_dict = vitals or {}
         vitals_record = VitalsRecord(
             visit_id=visit.id,
-            blood_pressure=str(vitals_dict.get("bloodPressure") or vitals_dict.get("blood_pressure") or ""),
+            blood_pressure=str(
+                vitals_dict.get("bloodPressure") or vitals_dict.get("blood_pressure") or ""
+            ),
             pulse=str(vitals_dict.get("pulse") or ""),
             temperature=str(vitals_dict.get("temperature") or ""),
             height=str(vitals_dict.get("height") or ""),
             weight=str(vitals_dict.get("weight") or ""),
-            oxygen_saturation=str(vitals_dict.get("oxygenSaturation") or vitals_dict.get("oxygen_saturation") or ""),
+            oxygen_saturation=str(
+                vitals_dict.get("oxygenSaturation") or vitals_dict.get("oxygen_saturation") or ""
+            ),
             entered_by=actor_id,
             entered_at=datetime.now(UTC),
         )

@@ -11,7 +11,9 @@ class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[uuid.UUID] = mapped_column(UuidType, primary_key=True, default=generate_uuid)
-    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UuidType, sa.ForeignKey("users.id"), nullable=True, index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UuidType, sa.ForeignKey("users.id"), nullable=True, index=True
+    )
     action: Mapped[str] = mapped_column(sa.String(100), index=True, nullable=False)
     entity_type: Mapped[str] = mapped_column(sa.String(100), index=True, nullable=False)
     entity_id: Mapped[str] = mapped_column(sa.String(100), index=True, nullable=False)

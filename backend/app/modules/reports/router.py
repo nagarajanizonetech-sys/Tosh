@@ -29,11 +29,17 @@ IST = ZoneInfo("Asia/Kolkata")
 
 def parse_date_range_ist(from_str: str, to_str: str) -> tuple[datetime, datetime]:
     start_dt = datetime.strptime(from_str, "%Y-%m-%d").replace(tzinfo=IST)
-    end_dt = datetime.strptime(to_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=IST)
+    end_dt = datetime.strptime(to_str, "%Y-%m-%d").replace(
+        hour=23, minute=59, second=59, microsecond=999999, tzinfo=IST
+    )
     return start_dt.astimezone(UTC), end_dt.astimezone(UTC)
 
 
-@router.get("/reports/summary", response_model=ReportSummaryResponse, summary="Get operational report summary")
+@router.get(
+    "/reports/summary",
+    response_model=ReportSummaryResponse,
+    summary="Get operational report summary",
+)
 async def get_report_summary(
     from_date: str = Query(..., alias="from"),
     to_date: str = Query(..., alias="to"),
@@ -50,7 +56,9 @@ async def get_report_summary(
     start_utc, end_utc = parse_date_range_ist(from_date, to_date)
 
     # 1. Registrations
-    pat_stmt = select(func.count(Patient.id)).where(Patient.registered_at.between(start_utc, end_utc))
+    pat_stmt = select(func.count(Patient.id)).where(
+        Patient.registered_at.between(start_utc, end_utc)
+    )
     if dept_clean:
         vis_subquery = select(Visit.patient_id).where(Visit.department == dept_clean)
         pat_stmt = pat_stmt.where(Patient.id.in_(vis_subquery))
@@ -77,13 +85,19 @@ async def get_report_summary(
     completed_visits = q_res.scalar_one() or 0
 
     # 4. Collections & Payment Methods
-    pay_stmt = select(Payment).join(Payment.invoice).where(Payment.paid_at.between(start_utc, end_utc))
+    pay_stmt = (
+        select(Payment).join(Payment.invoice).where(Payment.paid_at.between(start_utc, end_utc))
+    )
     if dept_clean:
         pay_stmt = pay_stmt.where(Invoice.department == dept_clean)
     pay_res = await db.execute(pay_stmt)
     payments = pay_res.scalars().all()
 
-    ref_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).join(Refund.invoice).where(Refund.refunded_at.between(start_utc, end_utc))
+    ref_stmt = (
+        select(func.coalesce(func.sum(Refund.amount), 0))
+        .join(Refund.invoice)
+        .where(Refund.refunded_at.between(start_utc, end_utc))
+    )
     if dept_clean:
         ref_stmt = ref_stmt.where(Invoice.department == dept_clean)
     ref_res = await db.execute(ref_stmt)
@@ -159,7 +173,9 @@ async def get_report_summary(
     for d in ("skin", "orthopaedics"):
         if dept_clean and dept_clean != d:
             continue
-        act_stmt = select(func.count(Visit.id)).where(Visit.department == d, Visit.started_at.between(start_utc, end_utc))
+        act_stmt = select(func.count(Visit.id)).where(
+            Visit.department == d, Visit.started_at.between(start_utc, end_utc)
+        )
         act_res = await db.execute(act_stmt)
         department_activity[d] = act_res.scalar_one() or 0
 
@@ -180,7 +196,11 @@ async def get_report_summary(
     )
 
 
-@router.get("/dashboard/summary", response_model=DashboardSummaryResponse, summary="Get today's dashboard counters")
+@router.get(
+    "/dashboard/summary",
+    response_model=DashboardSummaryResponse,
+    summary="Get today's dashboard counters",
+)
 async def get_dashboard_summary(
     department: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -210,20 +230,30 @@ async def get_dashboard_summary(
     completed_count = status_counts.get("Completed", 0)
 
     # Appointments today
-    apt_stmt = select(func.count(Appointment.id)).where(Appointment.starts_at.between(start_utc, end_utc))
+    apt_stmt = select(func.count(Appointment.id)).where(
+        Appointment.starts_at.between(start_utc, end_utc)
+    )
     if dept_clean:
         apt_stmt = apt_stmt.where(Appointment.department == dept_clean)
     apt_res = await db.execute(apt_stmt)
     appointments_count = apt_res.scalar_one() or 0
 
     # Collections today
-    pay_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).join(Payment.invoice).where(Payment.paid_at.between(start_utc, end_utc))
+    pay_stmt = (
+        select(func.coalesce(func.sum(Payment.amount), 0))
+        .join(Payment.invoice)
+        .where(Payment.paid_at.between(start_utc, end_utc))
+    )
     if dept_clean:
         pay_stmt = pay_stmt.where(Invoice.department == dept_clean)
     pay_res = await db.execute(pay_stmt)
     collections_paise = int(pay_res.scalar_one())
 
-    ref_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).join(Refund.invoice).where(Refund.refunded_at.between(start_utc, end_utc))
+    ref_stmt = (
+        select(func.coalesce(func.sum(Refund.amount), 0))
+        .join(Refund.invoice)
+        .where(Refund.refunded_at.between(start_utc, end_utc))
+    )
     if dept_clean:
         ref_stmt = ref_stmt.where(Invoice.department == dept_clean)
     ref_res = await db.execute(ref_stmt)

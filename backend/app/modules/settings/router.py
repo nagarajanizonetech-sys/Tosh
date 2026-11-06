@@ -38,7 +38,11 @@ async def get_fee_settings(
     )
 
 
-@router.put("/fees/{department}", response_model=FeeSettingsResponse, summary="Update consultation fee for department")
+@router.put(
+    "/fees/{department}",
+    response_model=FeeSettingsResponse,
+    summary="Update consultation fee for department",
+)
 async def update_department_fee(
     department: str,
     payload: UpdateFeeRequest,
@@ -48,7 +52,11 @@ async def update_department_fee(
 ) -> FeeSettingsResponse:
     dept = department.lower()
     if dept not in ("skin", "orthopaedics"):
-        raise AppException(f"Invalid department '{department}'. Must be 'skin' or 'orthopaedics'.", code="INVALID_DEPARTMENT", status_code=422)
+        raise AppException(
+            f"Invalid department '{department}'. Must be 'skin' or 'orthopaedics'.",
+            code="INVALID_DEPARTMENT",
+            status_code=422,
+        )
 
     stmt = select(FeeSetting).where(FeeSetting.department == dept)
     res = await db.execute(stmt)
@@ -58,7 +66,9 @@ async def update_department_fee(
     before_amount = fee_setting.amount if fee_setting else None
 
     if not fee_setting:
-        fee_setting = FeeSetting(department=dept, amount=amount_paise, currency="INR", updated_by=current_user.id)
+        fee_setting = FeeSetting(
+            department=dept, amount=amount_paise, currency="INR", updated_by=current_user.id
+        )
         db.add(fee_setting)
     else:
         fee_setting.amount = amount_paise

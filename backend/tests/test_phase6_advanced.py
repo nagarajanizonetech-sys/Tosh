@@ -36,7 +36,9 @@ async def ortho_doctor_headers(async_client: AsyncClient, seed_test_users):
 
 
 @pytest.mark.asyncio
-async def test_follow_ups_lifecycle_and_computed_overdue(async_client: AsyncClient, reception_headers):
+async def test_follow_ups_lifecycle_and_computed_overdue(
+    async_client: AsyncClient, reception_headers
+):
     # Register patient
     pat_res = await async_client.post(
         "/api/v1/patients",
@@ -91,13 +93,17 @@ async def test_follow_ups_lifecycle_and_computed_overdue(async_client: AsyncClie
     fut_fu_id = fu_fut["id"]
 
     # 3. Query follow-ups with patientId filter
-    list_res = await async_client.get(f"/api/v1/follow-ups?patientId={pat_id}", headers=reception_headers)
+    list_res = await async_client.get(
+        f"/api/v1/follow-ups?patientId={pat_id}", headers=reception_headers
+    )
     assert list_res.status_code == 200
     items = list_res.json()["items"]
     assert len(items) == 2
 
     # 4. Patient sub-resource GET /patients/{id}/follow-ups
-    sub_res = await async_client.get(f"/api/v1/patients/{pat_id}/follow-ups", headers=reception_headers)
+    sub_res = await async_client.get(
+        f"/api/v1/patients/{pat_id}/follow-ups", headers=reception_headers
+    )
     assert sub_res.status_code == 200
     assert len(sub_res.json()["items"]) == 2
 
@@ -170,7 +176,9 @@ async def test_consultation_save_creates_linked_follow_up(
     assert save_res.status_code == 200
 
     # Verify linked follow-up automatically exists
-    fu_list = await async_client.get(f"/api/v1/follow-ups?patientId={pat_id}", headers=reception_headers)
+    fu_list = await async_client.get(
+        f"/api/v1/follow-ups?patientId={pat_id}", headers=reception_headers
+    )
     assert fu_list.status_code == 200
     items = fu_list.json()["items"]
     assert len(items) == 1

@@ -18,11 +18,13 @@ ROOT_DIR = BACKEND_DIR.parent
 possible_env_files: list[Path] = []
 if custom_env := os.getenv("ENV_FILE"):
     possible_env_files.append(Path(custom_env))
-possible_env_files.extend([
-    BACKEND_DIR / ".env",
-    ROOT_DIR / ".env",
-    Path.cwd() / ".env",
-])
+possible_env_files.extend(
+    [
+        BACKEND_DIR / ".env",
+        ROOT_DIR / ".env",
+        Path.cwd() / ".env",
+    ]
+)
 
 # Attempt to load into os.environ (via python-dotenv if installed, or fallback manual parser)
 # Using override=True so that edits in .env immediately take effect over stale shell variables
@@ -50,8 +52,8 @@ except ImportError:
                         ):
                             val = val[1:-1]
                         os.environ[key] = val
-            except Exception:
-                pass
+            except (OSError, UnicodeDecodeError):
+                continue
 
 # Filter and deduplicate existing files for pydantic-settings
 valid_env_files: list[str] = []
@@ -63,7 +65,9 @@ for p in possible_env_files:
             seen_paths.add(resolved)
             valid_env_files.append(resolved)
 
-env_file_setting: tuple[str, ...] = tuple(valid_env_files) if valid_env_files else (str(BACKEND_DIR / ".env"),)
+env_file_setting: tuple[str, ...] = (
+    tuple(valid_env_files) if valid_env_files else (str(BACKEND_DIR / ".env"),)
+)
 
 
 DEFAULT_CORS_ORIGINS: list[str] = [
@@ -86,7 +90,9 @@ class Settings(BaseSettings):
     # Core Application Settings (loaded from .env)
     APP_NAME: str = Field(default_factory=lambda: os.getenv("APP_NAME", "Tosh Clinic HMS API"))
     ENVIRONMENT: str = Field(default_factory=lambda: os.getenv("ENVIRONMENT", "development"))
-    DEBUG: bool = Field(default_factory=lambda: os.getenv("DEBUG", "true").lower() in ("true", "1", "yes"))
+    DEBUG: bool = Field(
+        default_factory=lambda: os.getenv("DEBUG", "true").lower() in ("true", "1", "yes")
+    )
     API_V1_PREFIX: str = Field(default_factory=lambda: os.getenv("API_V1_PREFIX", "/api/v1"))
 
     # Server Host & Port (loaded from .env)
@@ -110,7 +116,7 @@ class Settings(BaseSettings):
                         parsed = json.loads(v)
                         if isinstance(parsed, list):
                             origins = [str(item).strip() for item in parsed]
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):
                         # Handle single-quoted list format e.g. "['http://localhost:5173', ...]"
                         inner = v[1:-1].strip()
                         if inner:
@@ -133,7 +139,9 @@ class Settings(BaseSettings):
 
     # Database URLs (loaded directly from .env without hardcoded defaults)
     DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", "").strip())
-    DATABASE_SYNC_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_SYNC_URL", "").strip())
+    DATABASE_SYNC_URL: str = Field(
+        default_factory=lambda: os.getenv("DATABASE_SYNC_URL", "").strip()
+    )
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
@@ -176,20 +184,34 @@ class Settings(BaseSettings):
     # JWT Authentication (loaded from .env)
     JWT_SECRET_KEY: str = Field(default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""))
     JWT_ALGORITHM: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"))
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15")))
-    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7")))
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+    )
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(
+        default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    )
 
     # Staff Initial Passwords (loaded from .env)
-    RECEPTION_INITIAL_PASSWORD: str = Field(default_factory=lambda: os.getenv("RECEPTION_INITIAL_PASSWORD", ""))
-    SKIN_INITIAL_PASSWORD: str = Field(default_factory=lambda: os.getenv("SKIN_INITIAL_PASSWORD", ""))
-    ORTHO_INITIAL_PASSWORD: str = Field(default_factory=lambda: os.getenv("ORTHO_INITIAL_PASSWORD", ""))
+    RECEPTION_INITIAL_PASSWORD: str = Field(
+        default_factory=lambda: os.getenv("RECEPTION_INITIAL_PASSWORD", "")
+    )
+    SKIN_INITIAL_PASSWORD: str = Field(
+        default_factory=lambda: os.getenv("SKIN_INITIAL_PASSWORD", "")
+    )
+    ORTHO_INITIAL_PASSWORD: str = Field(
+        default_factory=lambda: os.getenv("ORTHO_INITIAL_PASSWORD", "")
+    )
 
     # Storage (loaded from .env)
     STORAGE_BACKEND: str = Field(default_factory=lambda: os.getenv("STORAGE_BACKEND", "local"))
-    LOCAL_STORAGE_DIR: str = Field(default_factory=lambda: os.getenv("LOCAL_STORAGE_DIR", "uploads"))
+    LOCAL_STORAGE_DIR: str = Field(
+        default_factory=lambda: os.getenv("LOCAL_STORAGE_DIR", "uploads")
+    )
     S3_ENDPOINT_URL: str | None = Field(default_factory=lambda: os.getenv("S3_ENDPOINT_URL"))
     S3_ACCESS_KEY_ID: str | None = Field(default_factory=lambda: os.getenv("S3_ACCESS_KEY_ID"))
-    S3_SECRET_ACCESS_KEY: str | None = Field(default_factory=lambda: os.getenv("S3_SECRET_ACCESS_KEY"))
+    S3_SECRET_ACCESS_KEY: str | None = Field(
+        default_factory=lambda: os.getenv("S3_SECRET_ACCESS_KEY")
+    )
     S3_BUCKET_NAME: str | None = Field(default_factory=lambda: os.getenv("S3_BUCKET_NAME"))
     S3_REGION_NAME: str | None = Field(default_factory=lambda: os.getenv("S3_REGION_NAME"))
 
@@ -197,7 +219,11 @@ class Settings(BaseSettings):
     TIMEZONE: str = Field(default_factory=lambda: os.getenv("TIMEZONE", "Asia/Kolkata"))
 
     # Auto-seed on startup (loaded from .env)
-    AUTO_SEED: bool = Field(default_factory=lambda: os.getenv("AUTO_SEED", "true").strip().lower() in ("true", "1", "yes"))
+    AUTO_SEED: bool = Field(
+        default_factory=lambda: (
+            os.getenv("AUTO_SEED", "true").strip().lower() in ("true", "1", "yes")
+        )
+    )
 
 
 settings = Settings()

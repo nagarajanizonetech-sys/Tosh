@@ -8,14 +8,32 @@ import structlog
 
 # Redaction patterns for PHI
 SENSITIVE_KEYS = {
-    "phone", "email", "address", "fullname", "full_name", "emergency_contact", "emergencycontact",
-    "symptoms", "medical_history", "medicalhistory", "allergies", "examination",
-    "assessment", "diagnosis", "treatment_plan", "treatmentplan", "prescription",
-    "password", "password_hash", "access_token", "refresh_token", "token"
+    "phone",
+    "email",
+    "address",
+    "fullname",
+    "full_name",
+    "emergency_contact",
+    "emergencycontact",
+    "symptoms",
+    "medical_history",
+    "medicalhistory",
+    "allergies",
+    "examination",
+    "assessment",
+    "diagnosis",
+    "treatment_plan",
+    "treatmentplan",
+    "prescription",
+    "password",
+    "password_hash",
+    "access_token",
+    "refresh_token",
+    "token",
 }
 
-PHONE_REGEX = re.compile(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}')
-EMAIL_REGEX = re.compile(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+')
+PHONE_REGEX = re.compile(r"(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}")
+EMAIL_REGEX = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
 
 
 def redact_sensitive_data(val: Any) -> Any:
@@ -64,7 +82,8 @@ def setup_logging(debug: bool = False) -> None:
         renderer = structlog.processors.JSONRenderer()
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),

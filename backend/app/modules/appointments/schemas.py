@@ -4,7 +4,9 @@ from pydantic import Field, field_validator
 
 from app.core.schemas import CamelModel
 
-AppointmentStatusType = Literal["Scheduled", "Checked-in", "In progress", "Completed", "Cancelled", "No-show"]
+AppointmentStatusType = Literal[
+    "Scheduled", "Checked-in", "In progress", "Completed", "Cancelled", "No-show"
+]
 VisitTypeLiteral = Literal["New", "Follow-up", "Walk-in"]
 DepartmentLiteral = Literal["skin", "orthopaedics"]
 

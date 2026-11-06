@@ -3,11 +3,16 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import structlog
+from sqlalchemy.exc import SQLAlchemyError
+
 from app.core.config import settings
 from app.core.errors import UnauthenticatedException
 from app.core.security import create_access_token, verify_password
 from app.modules.auth.repository import AuthRepository
 from app.modules.users.models import User
+
+logger = structlog.get_logger("tosh.auth")
 
 
 class AuthService:
@@ -60,11 +65,12 @@ class AuthService:
                 )
                 self.repo.db.add(audit)
                 await self.repo.db.commit()
-            except Exception:
+            except SQLAlchemyError as db_err:
+                logger.warning("auth_failed_audit_write_failed", error=str(db_err))
                 try:
                     await self.repo.db.rollback()
-                except Exception:
-                    pass
+                except SQLAlchemyError as rb_err:
+                    logger.debug("auth_rollback_failed", error=str(rb_err))
             raise UnauthenticatedException("Invalid email or password.")
 
         if not verify_password(password, user.password_hash):
@@ -88,11 +94,12 @@ class AuthService:
                 )
                 self.repo.db.add(audit)
                 await self.repo.db.commit()
-            except Exception:
+            except SQLAlchemyError as db_err:
+                logger.warning("auth_failed_audit_write_failed", error=str(db_err))
                 try:
                     await self.repo.db.rollback()
-                except Exception:
-                    pass
+                except SQLAlchemyError as rb_err:
+                    logger.debug("auth_rollback_failed", error=str(rb_err))
 
             if user.locked_until:
                 raise AppException(
@@ -119,13 +126,15 @@ class AuthService:
         self.repo.db.add(audit)
 
         # Generate tokens
-        access_token = create_access_token({
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role,
-            "department": user.department,
-            "name": user.display_name,
-        })
+        access_token = create_access_token(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "department": user.department,
+                "name": user.display_name,
+            }
+        )
 
         raw_refresh_token = secrets.token_urlsafe(64)
         token_hash = self._hash_token(raw_refresh_token)
@@ -163,13 +172,15 @@ class AuthService:
         await self.repo.revoke_refresh_token(token_record.id, replaced_by=new_record.id)
         await self.repo.db.commit()
 
-        new_access_token = create_access_token({
-            "sub": str(user.id),
-            "email": user.email,
-            "role": user.role,
-            "department": user.department,
-            "name": user.display_name,
-        })
+        new_access_token = create_access_token(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "department": user.department,
+                "name": user.display_name,
+            }
+        )
 
         return new_access_token, new_raw_refresh_token, user
 
@@ -268,11 +279,13 @@ class AuthService:
         updated_user = await self.repo.get_user_by_id(user.id)
         assert updated_user is not None
 
-        new_access_token = create_access_token({
-            "sub": str(updated_user.id),
-            "email": updated_user.email,
-            "role": updated_user.role,
-            "department": updated_user.department,
-            "name": updated_user.display_name,
-        })
+        new_access_token = create_access_token(
+            {
+                "sub": str(updated_user.id),
+                "email": updated_user.email,
+                "role": updated_user.role,
+                "department": updated_user.department,
+                "name": updated_user.display_name,
+            }
+        )
         return new_access_token, raw_refresh, updated_user

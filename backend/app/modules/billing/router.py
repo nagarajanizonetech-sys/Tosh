@@ -20,7 +20,6 @@ from app.modules.audit.service import log_audit_event
 from app.modules.auth.dependencies import get_current_user, require_role
 from app.modules.billing.models import Invoice, InvoiceCharge, Payment, Refund
 from app.modules.billing.schemas import (
-    UpdateInvoiceRequest,
     ChargeItemResponse,
     CreateVisitChargeRequest,
     InvoiceResponse,
@@ -29,6 +28,7 @@ from app.modules.billing.schemas import (
     RecordPaymentRequest,
     RecordRefundRequest,
     RefundResponse,
+    UpdateInvoiceRequest,
 )
 from app.modules.catalog.models import ChargeCatalogItem
 from app.modules.patients.router import find_patient_by_id
@@ -62,7 +62,9 @@ def get_invoice_lock(invoice_id: str) -> asyncio.Lock:
     return _invoice_locks[key]
 
 
-async def find_invoice_by_id(db: AsyncSession, identifier: str, for_update: bool = False) -> Invoice | None:
+async def find_invoice_by_id(
+    db: AsyncSession, identifier: str, for_update: bool = False
+) -> Invoice | None:
     try:
         val_uuid = uuid.UUID(identifier)
         stmt = select(Invoice).where(or_(Invoice.id == val_uuid, Invoice.display_id == identifier))
@@ -238,7 +240,12 @@ async def list_invoices(
     )
 
 
-@router.post("/invoices/{invoice_id}/payments", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED, summary="Record payment on invoice")
+@router.post(
+    "/invoices/{invoice_id}/payments",
+    response_model=PaymentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record payment on invoice",
+)
 async def record_payment(
     invoice_id: str,
     payload: RecordPaymentRequest,
@@ -276,13 +283,19 @@ async def record_payment(
                 )
 
         # Calculate balance fresh from db
-        chg_sum_stmt = select(func.coalesce(func.sum(InvoiceCharge.amount), 0)).where(InvoiceCharge.invoice_id == invoice.id)
+        chg_sum_stmt = select(func.coalesce(func.sum(InvoiceCharge.amount), 0)).where(
+            InvoiceCharge.invoice_id == invoice.id
+        )
         total_charges_paise: int = int((await db.execute(chg_sum_stmt)).scalar_one())
 
-        pay_sum_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.invoice_id == invoice.id)
+        pay_sum_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.invoice_id == invoice.id
+        )
         total_payments_paise: int = int((await db.execute(pay_sum_stmt)).scalar_one())
 
-        refund_sum_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).where(Refund.invoice_id == invoice.id)
+        refund_sum_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).where(
+            Refund.invoice_id == invoice.id
+        )
         total_refunds_paise: int = int((await db.execute(refund_sum_stmt)).scalar_one())
 
         net_paid_paise = max(0, total_payments_paise - total_refunds_paise)
@@ -315,25 +328,38 @@ async def record_payment(
             entity_id=invoice.display_id,
             actor_user_id=current_user.id,
             patient_id=invoice.patient_id,
-            after_state={"paymentId": display_id, "amount": payload.amount, "method": payload.method},
+            after_state={
+                "paymentId": display_id,
+                "amount": payload.amount,
+                "method": payload.method,
+            },
             ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
 
         await db.commit()
-        await broadcast_event("BILLING_UPDATE", {"action": "payment", "invoiceId": invoice.display_id})
+        await broadcast_event(
+            "BILLING_UPDATE", {"action": "payment", "invoiceId": invoice.display_id}
+        )
 
         return PaymentResponse(
             id=payment.display_id,
             amount=round(payment.amount / 100.0, 2),
             method=payment.method,
             transaction_reference=payment.transaction_reference,
-            paid_at=payment.paid_at.isoformat() if payment.paid_at else datetime.now(UTC).isoformat(),
+            paid_at=payment.paid_at.isoformat()
+            if payment.paid_at
+            else datetime.now(UTC).isoformat(),
             recorded_by=str(payment.recorded_by) if payment.recorded_by else None,
         )
 
 
-@router.post("/invoices/{invoice_id}/refunds", response_model=RefundResponse, status_code=status.HTTP_201_CREATED, summary="Record refund on invoice")
+@router.post(
+    "/invoices/{invoice_id}/refunds",
+    response_model=RefundResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Record refund on invoice",
+)
 async def record_refund(
     invoice_id: str,
     payload: RecordRefundRequest,
@@ -347,10 +373,14 @@ async def record_refund(
 
     lock = get_invoice_lock(str(invoice.id))
     async with lock:
-        pay_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.invoice_id == invoice.id)
+        pay_stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.invoice_id == invoice.id
+        )
         total_payments_paise: int = int((await db.execute(pay_stmt)).scalar_one())
 
-        ref_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).where(Refund.invoice_id == invoice.id)
+        ref_stmt = select(func.coalesce(func.sum(Refund.amount), 0)).where(
+            Refund.invoice_id == invoice.id
+        )
         total_refunds_paise: int = int((await db.execute(ref_stmt)).scalar_one())
 
         net_paid_paise = max(0, total_payments_paise - total_refunds_paise)
@@ -382,24 +412,37 @@ async def record_refund(
             entity_id=invoice.display_id,
             actor_user_id=current_user.id,
             patient_id=invoice.patient_id,
-            after_state={"refundId": display_id, "amount": payload.amount, "reason": payload.reason},
+            after_state={
+                "refundId": display_id,
+                "amount": payload.amount,
+                "reason": payload.reason,
+            },
             ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
 
         await db.commit()
-        await broadcast_event("BILLING_UPDATE", {"action": "payment", "invoiceId": invoice.display_id})
+        await broadcast_event(
+            "BILLING_UPDATE", {"action": "payment", "invoiceId": invoice.display_id}
+        )
 
         return RefundResponse(
             id=refund.display_id,
             amount=round(refund.amount / 100.0, 2),
             reason=refund.reason,
-            refunded_at=refund.refunded_at.isoformat() if refund.refunded_at else datetime.now(UTC).isoformat(),
+            refunded_at=refund.refunded_at.isoformat()
+            if refund.refunded_at
+            else datetime.now(UTC).isoformat(),
             recorded_by=str(refund.recorded_by) if refund.recorded_by else None,
         )
 
 
-@router.post("/visits/{visit_id}/charges", response_model=ChargeItemResponse, status_code=status.HTTP_201_CREATED, summary="Add charge to visit invoice")
+@router.post(
+    "/visits/{visit_id}/charges",
+    response_model=ChargeItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add charge to visit invoice",
+)
 async def add_visit_charge(
     visit_id: str,
     payload: CreateVisitChargeRequest,
@@ -413,7 +456,9 @@ async def add_visit_charge(
 
     # Doctor of that department or reception staff
     if current_user.role != visit.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can add charges.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can add charges."
+        )
 
     # Find linked invoice
     inv_stmt = select(Invoice).where(Invoice.visit_id == visit.id).with_for_update(of=Invoice)
@@ -463,7 +508,9 @@ async def add_visit_charge(
     )
 
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
     await db.refresh(charge)
 
     return ChargeItemResponse(
@@ -475,7 +522,13 @@ async def add_visit_charge(
         date=charge.created_at.strftime("%Y-%m-%d"),
     )
 
-@router.post("/invoices/{invoice_id}/charges", response_model=ChargeItemResponse, status_code=status.HTTP_201_CREATED, summary="Add charge directly to invoice")
+
+@router.post(
+    "/invoices/{invoice_id}/charges",
+    response_model=ChargeItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add charge directly to invoice",
+)
 async def add_invoice_charge(
     invoice_id: str,
     payload: CreateVisitChargeRequest,
@@ -488,7 +541,9 @@ async def add_invoice_charge(
         raise NotFoundException(f"Invoice with ID {invoice_id} not found.")
 
     if current_user.role != invoice.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can add charges.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can add charges."
+        )
 
     final_amount = payload.amount
     description = payload.description
@@ -530,7 +585,9 @@ async def add_invoice_charge(
     )
 
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
     await db.refresh(charge)
 
     return ChargeItemResponse(
@@ -543,10 +600,11 @@ async def add_invoice_charge(
     )
 
 
-
-
-
-@router.patch("/invoices/{invoice_id}", response_model=InvoiceResponse, summary="Update invoice consultation fee")
+@router.patch(
+    "/invoices/{invoice_id}",
+    response_model=InvoiceResponse,
+    summary="Update invoice consultation fee",
+)
 async def update_invoice(
     invoice_id: str,
     payload: UpdateInvoiceRequest,
@@ -559,20 +617,28 @@ async def update_invoice(
         raise NotFoundException(f"Invoice with ID {invoice_id} not found.")
 
     if current_user.role != invoice.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can edit invoices.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can edit invoices."
+        )
 
     if payload.consultation_fee is not None:
         if payload.consultation_fee < 0:
             raise AppException("Consultation fee cannot be negative.", status_code=400)
-        invoice.consultation_fee = int(round(payload.consultation_fee * 100))
+        invoice.consultation_fee = round(payload.consultation_fee * 100)
 
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
     await db.refresh(invoice)
     return to_invoice_response(invoice)
 
 
-@router.delete("/invoices/{invoice_id}/payments/{payment_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete payment from invoice")
+@router.delete(
+    "/invoices/{invoice_id}/payments/{payment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete payment from invoice",
+)
 async def delete_invoice_payment(
     invoice_id: str,
     payment_id: str,
@@ -585,11 +651,15 @@ async def delete_invoice_payment(
         raise NotFoundException(f"Invoice with ID {invoice_id} not found.")
 
     if current_user.role != invoice.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can delete payments.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can delete payments."
+        )
 
     conditions = [Payment.invoice_id == invoice.id]
     if is_uuid(payment_id):
-        conditions.append(or_(Payment.id == uuid.UUID(payment_id), Payment.display_id == payment_id))
+        conditions.append(
+            or_(Payment.id == uuid.UUID(payment_id), Payment.display_id == payment_id)
+        )
     else:
         conditions.append(Payment.display_id == payment_id)
 
@@ -601,10 +671,16 @@ async def delete_invoice_payment(
 
     await db.delete(payment)
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
 
 
-@router.patch("/invoices/{invoice_id}/charges/{charge_id}", response_model=ChargeItemResponse, summary="Update charge on invoice")
+@router.patch(
+    "/invoices/{invoice_id}/charges/{charge_id}",
+    response_model=ChargeItemResponse,
+    summary="Update charge on invoice",
+)
 async def update_invoice_charge(
     invoice_id: str,
     charge_id: str,
@@ -618,11 +694,15 @@ async def update_invoice_charge(
         raise NotFoundException(f"Invoice with ID {invoice_id} not found.")
 
     if current_user.role != invoice.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can edit charges.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can edit charges."
+        )
 
     conditions = [InvoiceCharge.invoice_id == invoice.id]
     if is_uuid(charge_id):
-        conditions.append(or_(InvoiceCharge.id == uuid.UUID(charge_id), InvoiceCharge.display_id == charge_id))
+        conditions.append(
+            or_(InvoiceCharge.id == uuid.UUID(charge_id), InvoiceCharge.display_id == charge_id)
+        )
     else:
         conditions.append(InvoiceCharge.display_id == charge_id)
 
@@ -633,14 +713,20 @@ async def update_invoice_charge(
         raise NotFoundException(f"Charge {charge_id} not found on invoice.")
 
     charge.description = payload.description.strip()
-    charge.amount = int(round(payload.amount * 100))
+    charge.amount = round(payload.amount * 100)
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
     await db.refresh(charge)
     return serialize_charge(charge, invoice.department)
 
 
-@router.delete("/invoices/{invoice_id}/charges/{charge_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete charge from invoice")
+@router.delete(
+    "/invoices/{invoice_id}/charges/{charge_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete charge from invoice",
+)
 async def delete_invoice_charge(
     invoice_id: str,
     charge_id: str,
@@ -653,12 +739,16 @@ async def delete_invoice_charge(
         raise NotFoundException(f"Invoice with ID {invoice_id} not found.")
 
     if current_user.role != invoice.department and current_user.role != "reception":
-        raise ForbiddenException("Only the clinician of this department or reception staff can delete charges.")
+        raise ForbiddenException(
+            "Only the clinician of this department or reception staff can delete charges."
+        )
 
     # Find charge by display_id or id
     conditions = [InvoiceCharge.invoice_id == invoice.id]
     if is_uuid(charge_id):
-        conditions.append(or_(InvoiceCharge.id == uuid.UUID(charge_id), InvoiceCharge.display_id == charge_id))
+        conditions.append(
+            or_(InvoiceCharge.id == uuid.UUID(charge_id), InvoiceCharge.display_id == charge_id)
+        )
     else:
         conditions.append(InvoiceCharge.display_id == charge_id)
 
@@ -686,8 +776,9 @@ async def delete_invoice_charge(
     )
 
     await db.commit()
-    await broadcast_event("BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id})
-    return None
+    await broadcast_event(
+        "BILLING_UPDATE", {"action": "charge_added", "invoiceId": invoice.display_id}
+    )
 
 
 def is_uuid(val: str) -> bool:

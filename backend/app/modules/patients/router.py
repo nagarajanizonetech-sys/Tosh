@@ -5,8 +5,8 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictException, ForbiddenException, NotFoundException
-from app.core.websocket import broadcast_event
 from app.core.tokens import next_display_id
+from app.core.websocket import broadcast_event
 from app.db.session import get_db
 from app.modules.audit.service import log_audit_event
 from app.modules.auth.dependencies import get_current_user, require_role
@@ -46,7 +46,9 @@ async def find_patient_by_id(db: AsyncSession, identifier: str) -> Patient | Non
     ident = identifier.strip()
     try:
         val_uuid = uuid.UUID(ident)
-        stmt = select(Patient).where(or_(Patient.id == val_uuid, func.lower(Patient.display_id) == ident.lower()))
+        stmt = select(Patient).where(
+            or_(Patient.id == val_uuid, func.lower(Patient.display_id) == ident.lower())
+        )
     except ValueError:
         stmt = select(Patient).where(func.lower(Patient.display_id) == ident.lower())
     res = await db.execute(stmt)
@@ -65,7 +67,9 @@ async def list_patients(
     # Role & Department guards
     if current_user.role in ("skin", "orthopaedics"):
         if department and department.lower() != current_user.role:
-            raise ForbiddenException("Clinicians cannot access patient data from other departments.")
+            raise ForbiddenException(
+                "Clinicians cannot access patient data from other departments."
+            )
         department = current_user.role
 
     stmt = select(Patient)
@@ -80,7 +84,9 @@ async def list_patients(
             Patient.phone.like(f"%{q_str}%"),
         ]
         if len(q_digits) >= 3:
-            cleaned_phone = func.replace(func.replace(func.replace(Patient.phone, " ", ""), "-", ""), "+", "")
+            cleaned_phone = func.replace(
+                func.replace(func.replace(Patient.phone, " ", ""), "-", ""), "+", ""
+            )
             conditions.append(cleaned_phone.like(f"%{q_digits}%"))
 
         stmt = stmt.where(or_(*conditions))
@@ -97,7 +103,9 @@ async def list_patients(
     total = total_res.scalar_one() or 0
 
     # Paginate
-    stmt = stmt.order_by(Patient.registered_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    stmt = (
+        stmt.order_by(Patient.registered_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
     result = await db.execute(stmt)
     patients = result.scalars().all()
 
@@ -121,7 +129,12 @@ require_reception = require_role("reception")
 require_staff = require_role("reception", "skin", "orthopaedics")
 
 
-@router.post("", response_model=PatientResponse, status_code=status.HTTP_201_CREATED, summary="Register patient")
+@router.post(
+    "",
+    response_model=PatientResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register patient",
+)
 async def create_patient(
     payload: CreatePatientRequest,
     force: bool = Query(False),
@@ -165,11 +178,14 @@ async def create_patient(
     await db.commit()
     await db.refresh(patient)
 
-    await broadcast_event("PATIENT_UPDATE", {
-        "action": "create",
-        "id": patient.display_id,
-        "name": patient.full_name,
-    })
+    await broadcast_event(
+        "PATIENT_UPDATE",
+        {
+            "action": "create",
+            "id": patient.display_id,
+            "name": patient.full_name,
+        },
+    )
 
     return to_patient_response(patient, [payload.department.lower()])
 
@@ -259,12 +275,15 @@ async def update_patient(
     await db.commit()
     await db.refresh(patient)
 
-    await broadcast_event("PATIENT_UPDATE", {
-        "action": "update",
-        "id": patient.display_id,
-        "name": patient.full_name,
-        "phone": patient.phone,
-    })
+    await broadcast_event(
+        "PATIENT_UPDATE",
+        {
+            "action": "update",
+            "id": patient.display_id,
+            "name": patient.full_name,
+            "phone": patient.phone,
+        },
+    )
 
     return to_patient_response(patient, list(depts))
 
@@ -323,7 +342,9 @@ async def get_patient_appointments(
     total_res = await db.execute(count_stmt)
     total = total_res.scalar_one() or 0
 
-    stmt = stmt.order_by(Appointment.starts_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    stmt = (
+        stmt.order_by(Appointment.starts_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    )
     res = await db.execute(stmt)
     appointments = res.scalars().all()
 
@@ -412,6 +433,3 @@ async def get_patient_follow_ups(
         page_size=page_size,
         total=total,
     )
-
-
-

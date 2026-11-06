@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_database()
     print("[SUCCESS] Tosh Clinic HMS backend ready!\n")
     from app.services.scheduler import shutdown_scheduler, start_scheduler
+
     start_scheduler()
     yield
     logger.info("application_shutting_down")
@@ -83,17 +84,25 @@ def _attach_cors_headers(request: Request, response: Response) -> Response:
         if req_headers:
             response.headers["access-control-allow-headers"] = req_headers
         elif "access-control-allow-headers" not in response.headers:
-            response.headers["access-control-allow-headers"] = "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
+            response.headers["access-control-allow-headers"] = (
+                "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
+            )
         if "access-control-allow-methods" not in response.headers:
-            response.headers["access-control-allow-methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+            response.headers["access-control-allow-methods"] = (
+                "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+            )
         response.headers["access-control-max-age"] = "86400"
     else:
         # Crucial for iframe/embed/object subresource requests where Origin header is omitted by browser
         response.headers["access-control-allow-origin"] = "*"
         if "access-control-allow-methods" not in response.headers:
-            response.headers["access-control-allow-methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+            response.headers["access-control-allow-methods"] = (
+                "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+            )
         if "access-control-allow-headers" not in response.headers:
-            response.headers["access-control-allow-headers"] = "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
+            response.headers["access-control-allow-headers"] = (
+                "Content-Type, Authorization, Accept, X-Request-ID, X-Requested-With, Range"
+            )
         response.headers["access-control-max-age"] = "86400"
     return response
 
@@ -135,7 +144,9 @@ async def security_and_request_id_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     if "/documents/" in request.url.path or request.url.path.startswith("/api/v1/documents"):
         allowed_origins = " ".join(settings.CORS_ORIGINS) if settings.CORS_ORIGINS else "'self'"
-        response.headers["Content-Security-Policy"] = f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000 http://127.0.0.1:5173 https://*.vercel.app https://tosh-drev-henna.vercel.app {allowed_origins}"
+        response.headers["Content-Security-Policy"] = (
+            f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000 http://127.0.0.1:5173 https://*.vercel.app https://tosh-drev-henna.vercel.app {allowed_origins}"
+        )
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     else:
         response.headers["X-Frame-Options"] = "DENY"
@@ -194,7 +205,8 @@ async def health():
 
 
 from fastapi import WebSocket, WebSocketDisconnect
-from app.core.websocket import ws_manager, broadcast_event
+
+from app.core.websocket import ws_manager
 
 
 @app.websocket("/api/v1/ws")
@@ -206,8 +218,10 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
-    except (WebSocketDisconnect, Exception):
-        pass
+    except WebSocketDisconnect:
+        logger.debug("websocket_client_disconnected_normally")
+    except (ConnectionError, RuntimeError, OSError) as exc:
+        logger.debug("websocket_connection_closed", error=str(exc))
     finally:
         await ws_manager.disconnect(websocket)
 
@@ -227,7 +241,6 @@ async def readiness():
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "not_ready", "database": "unreachable"},
         )
-
 
 
 from fastapi import APIRouter
@@ -273,5 +286,5 @@ app.include_router(api_v1_router)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG)
 
+    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=settings.DEBUG)

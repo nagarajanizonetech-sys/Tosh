@@ -6,7 +6,13 @@ from app.core.limiter import limiter
 from app.db.session import get_db
 from app.modules.auth.dependencies import get_current_user
 from app.modules.auth.repository import AuthRepository
-from app.modules.auth.schemas import LoginRequest, LoginResponse, RefreshRequest, RefreshResponse, UserPublic
+from app.modules.auth.schemas import (
+    LoginRequest,
+    LoginResponse,
+    RefreshRequest,
+    RefreshResponse,
+    UserPublic,
+)
 from app.modules.auth.service import AuthService
 from app.modules.users.models import User
 
@@ -52,16 +58,23 @@ async def login(
     )
 
 
-@router.post("/refresh", response_model=RefreshResponse, summary="Rotate refresh token and issue access token")
+@router.post(
+    "/refresh",
+    response_model=RefreshResponse,
+    summary="Rotate refresh token and issue access token",
+)
 async def refresh(
     response: Response,
     payload: RefreshRequest | None = None,
     refresh_token: str | None = Cookie(None),
     service: AuthService = Depends(get_auth_service),
 ) -> RefreshResponse:
-    effective_token = (payload.refresh_token if payload and payload.refresh_token else None) or refresh_token
+    effective_token = (
+        payload.refresh_token if payload and payload.refresh_token else None
+    ) or refresh_token
     if not effective_token:
         from app.core.errors import UnauthenticatedException
+
         raise UnauthenticatedException("No refresh token provided.")
 
     access_token, raw_refresh, user = await service.refresh_tokens(effective_token)

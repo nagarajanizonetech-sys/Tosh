@@ -153,7 +153,10 @@ async def test_change_password_flow(async_client: AsyncClient, seed_test_users):
     change_resp = await async_client.post(
         "/api/v1/auth/change-password",
         headers={"Authorization": f"Bearer {token}"},
-        json={"oldPassword": settings.RECEPTION_INITIAL_PASSWORD, "newPassword": "BrandNewPassword123!"},
+        json={
+            "oldPassword": settings.RECEPTION_INITIAL_PASSWORD,
+            "newPassword": "BrandNewPassword123!",
+        },
     )
     assert change_resp.status_code == 200
     change_data = change_resp.json()

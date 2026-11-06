@@ -1,9 +1,10 @@
 import asyncio
-from datetime import UTC, datetime
 import json
+from datetime import UTC, datetime
 from typing import Any
-from fastapi import WebSocket
+
 import structlog
+from fastapi import WebSocket, WebSocketDisconnect
 
 logger = structlog.get_logger("tosh.websocket")
 
@@ -33,17 +34,21 @@ class ConnectionManager:
                 return
             connections = list(self.active_connections)
 
-        message = json.dumps({
-            "event": event_type,
-            "data": data or {},
-            "timestamp": datetime.now(UTC).isoformat(),
-        }, default=str)
+        message = json.dumps(
+            {
+                "event": event_type,
+                "data": data or {},
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
+            default=str,
+        )
 
         dead_connections: set[WebSocket] = set()
         for ws in connections:
             try:
                 await ws.send_text(message)
-            except Exception:
+            except (WebSocketDisconnect, RuntimeError, ConnectionError, OSError) as ws_err:
+                logger.debug("websocket_client_send_failed", error=str(ws_err))
                 dead_connections.add(ws)
 
         if dead_connections:
@@ -58,5 +63,5 @@ async def broadcast_event(event_type: str, data: Any = None) -> None:
     """Convenience helper to broadcast an event safely without blocking endpoint responses."""
     try:
         await ws_manager.broadcast(event_type, data)
-    except Exception as exc:
+    except (RuntimeError, OSError, ConnectionError, ValueError, TypeError) as exc:
         logger.warning("broadcast_failed", event=event_type, error=str(exc))

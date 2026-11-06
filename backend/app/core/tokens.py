@@ -30,7 +30,7 @@ async def allocate_daily_token(db: AsyncSession, department: str) -> str:
     """
     dept = department.lower()
     prefix = "S-" if dept == "skin" else "O-"
-    
+
     # Calculate IST current date
     ist_tz = ZoneInfo("Asia/Kolkata")
     now_ist = datetime.now(UTC).astimezone(ist_tz)
@@ -54,12 +54,9 @@ async def allocate_daily_token(db: AsyncSession, department: str) -> str:
     # Fallback for SQLite in tests: coroutine lock / select & update
     lock = get_token_lock(dept, str(today_ist))
     async with lock:
-        stmt = (
-            select(DailyTokenCounter)
-            .where(
-                DailyTokenCounter.department == dept,
-                DailyTokenCounter.date == today_ist,
-            )
+        stmt = select(DailyTokenCounter).where(
+            DailyTokenCounter.department == dept,
+            DailyTokenCounter.date == today_ist,
         )
         res = await db.execute(stmt)
         counter = res.scalar_one_or_none()

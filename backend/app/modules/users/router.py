@@ -1,11 +1,11 @@
 import uuid
-from fastapi import APIRouter, Depends, Query
+
+from fastapi import APIRouter, Query
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import logger
-from app.db.session import get_optional_db
 from app.modules.users.models import Doctor
 from app.modules.users.schemas import DoctorPublic
 
@@ -33,6 +33,7 @@ async def list_doctors(
 ) -> list[DoctorPublic]:
     try:
         from app.db.session import async_session_factory
+
         async with async_session_factory() as session:
             stmt = select(Doctor).options(selectinload(Doctor.user))
             if department:
@@ -49,7 +50,7 @@ async def list_doctors(
                     )
                     for doc in doctors
                 ]
-    except Exception as exc:
+    except (SQLAlchemyError, OSError) as exc:
         logger.warning("list_doctors_db_query_failed", error=str(exc))
 
     # Return default doctors so the frontend login page never fails with a 500 error

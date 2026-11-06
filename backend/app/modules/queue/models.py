@@ -12,11 +12,21 @@ class QueueEntry(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UuidType, primary_key=True, default=generate_uuid)
     display_id: Mapped[str] = mapped_column(sa.String(30), unique=True, index=True, nullable=False)
-    token: Mapped[str] = mapped_column(sa.String(20), index=True, nullable=False)  # 'S-001' or 'O-001'
-    visit_id: Mapped[uuid.UUID] = mapped_column(UuidType, sa.ForeignKey("visits.id", ondelete="CASCADE"), index=True, nullable=False)
-    patient_id: Mapped[uuid.UUID] = mapped_column(UuidType, sa.ForeignKey("patients.id", ondelete="CASCADE"), index=True, nullable=False)
-    department: Mapped[str] = mapped_column(sa.String(30), index=True, nullable=False)  # 'skin', 'orthopaedics'
-    doctor_id: Mapped[uuid.UUID] = mapped_column(UuidType, sa.ForeignKey("doctors.id"), index=True, nullable=False)
+    token: Mapped[str] = mapped_column(
+        sa.String(20), index=True, nullable=False
+    )  # 'S-001' or 'O-001'
+    visit_id: Mapped[uuid.UUID] = mapped_column(
+        UuidType, sa.ForeignKey("visits.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UuidType, sa.ForeignKey("patients.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    department: Mapped[str] = mapped_column(
+        sa.String(30), index=True, nullable=False
+    )  # 'skin', 'orthopaedics'
+    doctor_id: Mapped[uuid.UUID] = mapped_column(
+        UuidType, sa.ForeignKey("doctors.id"), index=True, nullable=False
+    )
     arrival_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
