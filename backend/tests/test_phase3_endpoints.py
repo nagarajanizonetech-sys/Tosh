@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -209,6 +210,7 @@ async def test_appointment_state_machine_and_queue_sync(
     pat_id = pat_res.json()["id"]
 
     # Create Appointment
+    fut_time = (datetime.now(UTC) + timedelta(days=2)).replace(microsecond=0).isoformat()
     apt_res = await async_client.post(
         "/api/v1/appointments",
         headers=reception_headers,
@@ -216,7 +218,7 @@ async def test_appointment_state_machine_and_queue_sync(
             "patientId": pat_id,
             "department": "orthopaedics",
             "doctor": "Dr. Sundarprakash",
-            "startsAt": "2026-10-24T10:00:00",
+            "startsAt": fut_time,
             "visitType": "New",
             "note": "Knee pain evaluation",
         },

@@ -19,6 +19,7 @@ from app.modules.users.models import User
 
 router = APIRouter(prefix="/catalog/charges", tags=["Catalog"])
 
+require_reception = require_role("reception")
 require_staff = require_role("reception", "skin", "orthopaedics")
 
 
@@ -85,7 +86,7 @@ async def create_catalog_charge(
     payload: CreateCatalogItemRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_reception),
 ) -> CatalogItemResponse:
     display_id = await next_display_id(db, ChargeCatalogItem, "CHG")
     price_paise = round(payload.price * 100)
@@ -122,7 +123,7 @@ async def update_catalog_charge(
     payload: UpdateCatalogItemRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_reception),
 ) -> CatalogItemResponse:
     item = await find_catalog_item_by_id(db, item_id)
     if not item:
@@ -175,7 +176,7 @@ async def delete_catalog_charge(
     item_id: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_reception),
 ) -> dict:
     item = await find_catalog_item_by_id(db, item_id)
     if not item:

@@ -22,8 +22,8 @@ class NoopProvider(NotificationProvider):
             provider_message_id=msg_id,
             message_preview=message[:50],
         )
-        # Returns success for simulated/standard delivery in local/self-hosted deployment
-        return True, msg_id
+        # No-op provider does not confirm delivery; reminder remains Queued
+        return False, msg_id
 
 
 _notification_provider: NotificationProvider | None = None

@@ -13,6 +13,7 @@ from app.core.errors import (
     NotFoundException,
     VisitLockedException,
 )
+from app.core.tokens import next_display_id
 from app.core.websocket import broadcast_event
 from app.db.session import get_db
 from app.modules.appointments.models import Appointment
@@ -31,6 +32,7 @@ from app.modules.consultations.schemas import (
 )
 from app.modules.documents.models import Document
 from app.modules.documents.schemas import PatientDocumentResponse
+from app.modules.followups.models import FollowUp
 from app.modules.patients.models import Patient
 from app.modules.queue.models import QueueEntry
 from app.modules.queue.schemas import VitalsSchema
@@ -480,6 +482,28 @@ async def save_consultation(
         consultation.treatment_plan = payload.treatment_plan
     if payload.follow_up_date is not None:
         consultation.follow_up_date = payload.follow_up_date
+        if payload.follow_up_date:
+            fu_stmt = select(FollowUp).where(FollowUp.source_visit_id == visit.id)
+            fu_res = await db.execute(fu_stmt)
+            existing_fu = fu_res.scalar_one_or_none()
+            if existing_fu:
+                existing_fu.date = payload.follow_up_date
+                existing_fu.department = visit.department
+                existing_fu.doctor_id = visit.doctor_id
+            else:
+                fu_disp_id = await next_display_id(db, FollowUp, "FU")
+                new_fu = FollowUp(
+                    display_id=fu_disp_id,
+                    patient_id=visit.patient_id,
+                    department=visit.department,
+                    doctor_id=visit.doctor_id,
+                    date=payload.follow_up_date,
+                    status="Upcoming",
+                    reminder_status="Not sent",
+                    source_visit_id=visit.id,
+                    note=f"Scheduled from visit {visit.display_id}",
+                )
+                db.add(new_fu)
     if payload.pain_location is not None:
         consultation.pain_location = payload.pain_location
     if payload.side is not None:

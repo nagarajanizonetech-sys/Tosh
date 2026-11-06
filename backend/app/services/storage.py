@@ -237,7 +237,7 @@ class LocalStorageService(StorageService):
         return False
 
     def get_signed_url(self, key: str, expires_seconds: int = 86400 * 7) -> str:
-        clean_key = Path(key).name
+        clean_key = key.lstrip("/").replace("\\", "/")
         expiry = int(time.time()) + expires_seconds
         payload = f"{clean_key}:{expiry}".encode()
         secret = (settings.JWT_SECRET_KEY or "tosh-secret-signing-key").encode()
@@ -248,14 +248,16 @@ class LocalStorageService(StorageService):
     def verify_signed_url(self, key: str, expires: int, signature: str) -> bool:
         if time.time() > expires:
             return False
-        clean_key = Path(key).name
+        clean_key = key.lstrip("/").replace("\\", "/")
         secret = (settings.JWT_SECRET_KEY or "tosh-secret-signing-key").encode()
 
-        # Direct check
-        payload = f"{clean_key}:{expires}".encode()
-        expected = hmac.new(secret, payload, hashlib.sha256).hexdigest()
-        if hmac.compare_digest(signature, expected):
-            return True
+        # Direct check on both full key and basename
+        keys_to_test = {clean_key, Path(clean_key).name}
+        for k in keys_to_test:
+            payload = f"{k}:{expires}".encode()
+            expected = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(signature, expected):
+                return True
 
         # Check with candidate extensions and stem variations
         stem = Path(clean_key).stem

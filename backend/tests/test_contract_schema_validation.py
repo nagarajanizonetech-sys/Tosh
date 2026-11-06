@@ -1,4 +1,5 @@
 import re
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -124,6 +125,7 @@ async def test_appointments_contract(async_client: AsyncClient, auth_headers):
     pat_id = p_res.json()["id"]
 
     # Create appointment
+    fut_time = (datetime.now(UTC) + timedelta(days=2)).replace(microsecond=0).isoformat()
     apt_res = await async_client.post(
         "/api/v1/appointments",
         headers=auth_headers,
@@ -131,7 +133,7 @@ async def test_appointments_contract(async_client: AsyncClient, auth_headers):
             "patientId": pat_id,
             "department": "orthopaedics",
             "doctor": "Dr. Sundarprakash",
-            "startsAt": "2026-10-25T11:00:00",
+            "startsAt": fut_time,
             "visitType": "Follow-up",
             "note": "Check healing",
         },

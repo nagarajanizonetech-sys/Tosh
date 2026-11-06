@@ -36,7 +36,12 @@ def set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
     )
 
 
-@router.post("/login", response_model=LoginResponse, summary="Sign in staff user")
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    response_model_exclude_none=True,
+    summary="Sign in staff user",
+)
 @limiter.limit("10/minute")
 async def login(
     request: Request,
@@ -53,7 +58,7 @@ async def login(
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
-        refresh_token=raw_refresh,
+        refresh_token=None,
         user=UserPublic.model_validate(user),
     )
 

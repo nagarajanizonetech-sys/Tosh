@@ -20,6 +20,8 @@ from app.core.logging import logger, setup_logging
 from app.db import session as db_session
 from app.db.init_db import init_database
 
+engine = db_session.engine
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

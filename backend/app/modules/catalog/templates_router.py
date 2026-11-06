@@ -45,6 +45,15 @@ async def get_body_region_templates(
     res = await db.execute(stmt)
     templates = res.scalars().all()
 
+    if not templates:
+        from app.scripts.seed import BODY_REGION_TEMPLATES
+
+        for tmpl_data in BODY_REGION_TEMPLATES:
+            db.add(BodyRegionTemplate(**tmpl_data))
+        await db.commit()
+        res = await db.execute(stmt)
+        templates = res.scalars().all()
+
     output = []
     for tmpl in templates:
         output.append(

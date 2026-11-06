@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -120,6 +121,7 @@ async def test_doctor_restricted_on_patch_appointment(
     )
     pat_id = p_res.json()["id"]
 
+    fut_time = (datetime.now(UTC) + timedelta(days=2)).replace(microsecond=0).isoformat()
     apt_res = await async_client.post(
         "/api/v1/appointments",
         headers=reception_headers,
@@ -127,7 +129,7 @@ async def test_doctor_restricted_on_patch_appointment(
             "patientId": pat_id,
             "department": "skin",
             "doctor": "Dr. Sangamitra",
-            "startsAt": "2026-11-05T14:00:00Z",
+            "startsAt": fut_time,
             "visitType": "New",
         },
     )
