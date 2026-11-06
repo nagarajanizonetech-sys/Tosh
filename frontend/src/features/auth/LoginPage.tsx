@@ -141,12 +141,12 @@ export function LoginPage() {
             <span className="brand-mark login-brand-mark">
               <img
                 className="brand-logo login-brand-logo"
-                src="/tosh-icon-circle.png"
+                src="/tosh-icon-circle.webp"
                 alt="Trichy Ortho & Skin Logo"
                 onError={(e) => {
                   const target = e.currentTarget;
-                  if (!target.src.includes('/images/image.png')) {
-                    target.src = '/images/image.png';
+                  if (!target.src.includes('/images/image.webp')) {
+                    target.src = '/images/image.webp';
                   }
                 }}
               />
@@ -300,7 +300,7 @@ export function LoginPage() {
       </main>
       <aside className="login-photo" aria-label="Clinic interior">
         <img
-          src="/images/clinic-sidebar.jpeg"
+          src="/images/clinic-sidebar.webp"
           alt="Bright contemporary clinic waiting room"
           onError={(event) => { event.currentTarget.style.display = 'none'; }}
         />

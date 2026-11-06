@@ -35,7 +35,7 @@ export function DoctorDashboard({ department }: { department: Department }) {
   const heroQuote = department === 'skin'
     ? 'Healthy skin is a reflection of overall wellness and dedicated care.'
     : 'Every step toward recovery is a step toward a better life.';
-  const heroImage = department === 'skin' ? '/images/skin-hero.png' : '/images/ortho-hero.png';
+  const heroImage = department === 'skin' ? '/images/skin-hero.webp' : '/images/ortho-hero.webp';
 
   return <>
     <div className={`clinical-hero-banner dept-${department}`}>

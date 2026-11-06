@@ -72,7 +72,7 @@ export function ReceptionDashboard() {
       </div>
 
       <div className="clinical-hero-media dept-reception" aria-hidden="true">
-        <img src="/images/reception-hero.png" alt="" className="clinical-hero-img dept-reception" />
+        <img src="/images/reception-hero.webp" alt="" className="clinical-hero-img dept-reception" />
         <div className="clinical-hero-fade" />
       </div>
     </div>

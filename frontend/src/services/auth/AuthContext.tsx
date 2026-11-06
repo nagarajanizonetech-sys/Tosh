@@ -75,7 +75,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
           window.location.pathname === '/' ||
           window.location.pathname === '' ||
           window.location.pathname === '/landing' ||
-          window.location.pathname === '/login';
+          window.location.pathname === '/login' ||
+          window.location.pathname === '/story' ||
+          window.location.pathname === '/specialties' ||
+          window.location.pathname === '/services' ||
+          window.location.pathname === '/doctors' ||
+          window.location.pathname === '/testimonials' ||
+          window.location.pathname === '/contact';
 
         if (!existingToken && isPublicPath) {
           if (isMounted) {
@@ -194,10 +200,10 @@ export function RouteGuard({ children }: PropsWithChildren) {
   useEffect(() => {
     if (isLoading) return;
 
+    const publicPaths = ['/', '/landing', '/login', '/story', '/specialties', '/services', '/doctors', '/testimonials', '/contact'];
     const isPublic =
-      location.pathname === '/' ||
-      location.pathname === '/landing' ||
-      location.pathname === '/login';
+      publicPaths.includes(location.pathname) ||
+      publicPaths.some((p) => p !== '/' && location.pathname.startsWith(`${p}/`));
 
     // If logged in staff visits /login, send them straight to their clinical workspace
     if (location.pathname === '/login' && user) {

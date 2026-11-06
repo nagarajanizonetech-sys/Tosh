@@ -333,17 +333,17 @@ export function AppShell() {
   return <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}>
     <div className={`mobile-scrim${mobileOpen ? ' visible' : ''}`} onClick={() => setMobileOpen(false)} aria-hidden="true" />
     <aside ref={sidebarRef} id="primary-navigation" className={`sidebar portal-${role}${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`} role={mobileOpen ? 'dialog' : undefined} aria-modal={mobileOpen || undefined} aria-label={`${info.label} navigation`}>
-      <div className="sidebar-brand"><span className="brand-mark"><img className="brand-logo" src="/tosh-icon-circle.png" alt="TOSH Foundation" /></span><div className="brand-copy"><div className="brand-text">TOSH Foundation</div><div className="brand-subtext">Care operations</div></div></div>
+      <div className="sidebar-brand"><span className="brand-mark"><img className="brand-logo" src="/tosh-icon-circle.webp" alt="TOSH Foundation" /></span><div className="brand-copy"><div className="brand-text">TOSH Foundation</div><div className="brand-subtext">Care operations</div></div></div>
       <div className="sidebar-bg-art" aria-hidden="true">
         <img
-          src={role === 'skin' ? '/images/sidebar-skin.jpg' : role === 'reception' ? '/images/sidebar-reception.png' : '/images/sidebar-spine.png'}
+          src={role === 'skin' ? '/images/sidebar-skin.webp' : role === 'reception' ? '/images/sidebar-reception.webp' : '/images/sidebar-spine.webp'}
           alt=""
           className={`sidebar-bg-img${role === 'skin' ? ' is-skin' : role === 'reception' ? ' is-reception' : ''}`}
         />
         <div className="sidebar-bg-overlay" />
       </div>
       <div className="sidebar-photo" aria-hidden="true">
-        <img src="/images/clinic-sidebar.jpeg" alt="" />
+        <img src="/images/clinic-sidebar.webp" alt="" />
         <div className="sidebar-photo-copy">
           <span>{role === 'reception' ? 'Today at TOSH Foundation' : 'Department workspace'}</span>
           <strong className={role === 'skin' ? 'is-skin' : undefined}>

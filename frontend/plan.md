@@ -25,16 +25,18 @@ Three low-probability directions considered: Quiet clinical modernism (0.07); Sw
 
 ## Application structure
 
-- `src/app/`: application bootstrap, route definitions, role/portal providers, and top-level navigation.
+- `src/app/`: application bootstrap, route definitions (`App.tsx`), role/portal providers, and route guarding.
 - `src/components/ui/`: reusable accessible buttons, form controls, cards, badges, dialogs/sheets, tables, tabs, empty/loading/error states.
-- `src/components/layout/`: sidebar/drawer, utility header, breadcrumbs, profile/logout, portal shell.
+- `src/components/layout/`: `AppShell.tsx` (sidebar/drawer, utility header, breadcrumbs, profile/logout, portal shell).
+- `src/components/shared/`: patient documents preview modal, clinical primitives, A4 print templates.
+- `src/features/landing/`: modular institutional clinic landing platform, including isolated section components (`HeroSection`, `ServicesSection`, etc.), dedicated subpages (`StorySubpage`, `SpecialtiesSubpage`, etc.), centralized `landingData.ts`, `types.ts`, and scoped `landing.css`.
 - `src/features/reception/`: dashboard, queue, appointments, patient directory/profile, billing/invoices, follow-ups, reports, settings.
-- `src/features/skin-doctor/` and `src/features/ortho-doctor/`: department dashboards, patient/appointment views, consultation workspaces, prescriptions/procedures; orthopaedics also owns body-region templates.
-- `src/features/consultations/`, `patients/`, `appointments/`, `queue/`, `billing/`, `follow-ups/`, `reports/`, `documents/`: shared domain screens and reusable workflow components where they serve both portals.
-- `src/services/repositories/`: typed repository interfaces and mode selection; `src/services/mock/`: shared in-memory/local demo adapter; `src/services/api/`: typed HTTP client, base URL from Vite environment, request/response contracts, and common errors.
-- `src/types/`, `src/schemas/`, `src/hooks/`, `src/utils/`, `src/styles/`: domain types, Zod schemas, shared hooks, formatting/ID helpers, print CSS and design tokens.
-- `public/manus-routes.json`: static manifest listing the complete page-route set before the first dev-server start.
-- Root documentation: `API_INTEGRATION.md` for endpoint/workflow contracts and `.env.example` for browser-safe API-mode configuration only.
+- `src/features/doctors/`: unified clinical doctor workspace with SOAP notes, 3 prescription modes, vitals tracking, body region templates, documents, and procedures.
+- `src/features/ortho/` and `src/features/skin/`: department-specific portal routing and wrappers.
+- `src/services/repositories/`: typed repository interfaces and mode selection; `src/services/mock/`: shared in-memory/local demo adapter; `src/services/api/`: typed HTTP client, WebSocket client, base URL from Vite environment, request/response contracts, and common errors.
+- `src/types/`, `src/schemas/`, `src/utils/`, `src/styles/`: domain types, Zod schemas, formatting/ID helpers, print CSS and Tailwind design tokens.
+- `public/`: WebP clinical imagery, manifest, sitemap, robots.txt, and favicon suite.
+- Root documentation: `FOLDER_STRUCTURE.md` for full project layout, `API_INTEGRATION.md` for endpoint contracts, and `.env.example` for browser-safe API-mode configuration.
 
 ## Feature outcomes
 

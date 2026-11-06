@@ -385,7 +385,7 @@ function InvoicePreview({
       <div className="invoice-header">
         <div className="invoice-brand">
           <span className="brand-mark">
-            <img className="brand-logo" src="/tosh-icon-circle.png" alt="TOSH Logo" />
+            <img className="brand-logo" src="/tosh-icon-circle.webp" alt="TOSH Logo" />
           </span>
           <div>
             <h2>TRICHY ORTHO & SKIN</h2>

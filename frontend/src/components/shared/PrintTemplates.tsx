@@ -36,7 +36,7 @@ export function PrintLetterhead({
     <div className="print-letterhead">
       <div className="print-letterhead-top">
         <div className="print-letterhead-brand">
-          <img src="/tosh-icon-circle.png" alt="TOSH Foundation Logo" className="print-letterhead-logo" />
+          <img src="/tosh-icon-circle.webp" alt="TOSH Foundation Logo" className="print-letterhead-logo" />
           <div className="print-letterhead-info">
             <h1 className="print-letterhead-title">TOSH FOUNDATION</h1>
             <p className="print-letterhead-tagline">Multispeciality Hospital & Research Center</p>

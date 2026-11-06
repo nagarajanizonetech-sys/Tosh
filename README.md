@@ -26,6 +26,9 @@ Production-grade Hospital Management System for Tosh Clinic, specialized for a t
 └──────────────────┘      └──────────────────┘      └──────────────────┘
 ```
 
+### Repository Structure
+For an exhaustive, file-by-file breakdown of the entire monorepo, see [FOLDER_STRUCTURE.md](./FOLDER_STRUCTURE.md).
+
 ### Module Structure (`backend/app/`)
 - `core/`: Application settings, security (Argon2id, JWT), exceptions, rate limiting, logging with PHI redaction.
 - `db/`: Async database session factory, base model, Alembic migrations.
@@ -45,6 +48,20 @@ Production-grade Hospital Management System for Tosh Clinic, specialized for a t
   - `storage.py`: Storage abstraction (`LocalStorageService` and `S3StorageService`).
   - `notification.py`: Provider interface (`NoopProvider`) for messaging/WhatsApp reminders.
   - `scheduler.py`: Background cron job running daily at 09:00 IST for patient follow-up reminders.
+
+### Frontend Structure (`frontend/src/`)
+- `app/`: Route configuration (`App.tsx`), route guards, theme and toast providers.
+- `components/`:
+  - `layout/`: `AppShell.tsx` responsive navigation rail, mobile drawer, user dropdown.
+  - `shared/`: Document previews, print templates (prescriptions, clinical notes, receipts).
+  - `ui/`: Accessible UI kit (Button, Modal, Card, Badge, Field, Tabs, Pagination).
+- `features/`:
+  - `landing/`: Modular institutional landing page with isolated sections, routed subpages (`/story`, `/specialties`, `/services`, `/doctors`, `/testimonials`, `/contact`), 3D stage, and scoped CSS.
+  - `doctors/`: Doctor consultation workspace with SOAP notes, prescription generator (3 modes), vitals tracking, and anatomical body region templates.
+  - `reception/`: Token queue, appointment scheduling, billing, patient records directory, and settings.
+  - `auth/`: Secure login, role-based redirection, and mandatory password reset.
+  - `ortho/` & `skin/`: Specialty-specific portal wrappers.
+- `services/`: Typed API client (`hospitalApi.ts`), live WebSocket client (`websocketClient.ts`), offline demo repository (`demoRepository.ts`), and Auth context.
 
 ---
 

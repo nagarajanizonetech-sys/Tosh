@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Allow: /story
+Allow: /specialties
+Allow: /services
+Allow: /doctors
+Allow: /testimonials
+Allow: /contact
+Allow: /landing
+
+Disallow: /reception
+Disallow: /reception/
+Disallow: /skin
+Disallow: /skin/
+Disallow: /ortho
+Disallow: /ortho/
+Disallow: /login
+
+Sitemap: http://localhost:3000/sitemap.xml
+
