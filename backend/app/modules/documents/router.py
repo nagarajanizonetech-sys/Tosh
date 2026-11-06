@@ -6,7 +6,7 @@ from pathlib import Path
 import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, inspect, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,8 +65,6 @@ def to_document_response(
     pat_id = patient_display_id
     if not pat_id:
         try:
-            from sqlalchemy.orm import inspect
-
             ins = inspect(doc)
             if ins and not ins.unloaded and "patient" in ins.dict and doc.patient:
                 pat_id = doc.patient.display_id

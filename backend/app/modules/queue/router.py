@@ -286,9 +286,9 @@ async def update_queue(
         dept = payload.department.lower()
         queue_entry.department = dept
         if queue_entry.visit_id:
-            v_stmt = select(Visit).where(Visit.id == queue_entry.visit_id)
-            v_res = await db.execute(v_stmt)
-            vis = v_res.scalar_one_or_none()
+            vis_stmt = select(Visit).where(Visit.id == queue_entry.visit_id)
+            vis_res = await db.execute(vis_stmt)
+            vis = vis_res.scalar_one_or_none()
             if vis:
                 vis.department = dept
             cons_stmt = select(Consultation).where(Consultation.visit_id == queue_entry.visit_id)
@@ -313,9 +313,9 @@ async def update_queue(
         if doctor_obj:
             queue_entry.doctor_id = doctor_obj.id
             if queue_entry.visit_id:
-                v_stmt = select(Visit).where(Visit.id == queue_entry.visit_id)
-                v_res = await db.execute(v_stmt)
-                vis = v_res.scalar_one_or_none()
+                vis_stmt = select(Visit).where(Visit.id == queue_entry.visit_id)
+                vis_res = await db.execute(vis_stmt)
+                vis = vis_res.scalar_one_or_none()
                 if vis:
                     vis.doctor_id = doctor_obj.id
 
@@ -330,13 +330,13 @@ async def update_queue(
     # 6. Update vitals if provided
     if payload.vitals and queue_entry.visit_id:
         v_dict = payload.vitals.model_dump()
-        v_stmt = (
+        vit_stmt = (
             select(VitalsRecord)
             .where(VitalsRecord.visit_id == queue_entry.visit_id)
             .order_by(VitalsRecord.entered_at.desc())
         )
-        v_res = await db.execute(v_stmt)
-        v_rec = v_res.scalar_one_or_none()
+        vit_res = await db.execute(vit_stmt)
+        v_rec = vit_res.scalar_one_or_none()
         if v_rec:
             v_rec.blood_pressure = str(v_dict.get("blood_pressure") or "")
             v_rec.pulse = str(v_dict.get("pulse") or "")
@@ -387,12 +387,12 @@ async def update_queue(
     )
 
     pay_stat = await compute_payment_status(db, queue_entry.visit_id)
-    v_stmt = (
+    final_vit_stmt = (
         select(VitalsRecord)
         .where(VitalsRecord.visit_id == queue_entry.visit_id)
         .order_by(VitalsRecord.entered_at.desc())
     )
-    v_res = await db.execute(v_stmt)
-    vitals_rec = v_res.scalar_one_or_none()
+    final_vit_res = await db.execute(final_vit_stmt)
+    vitals_rec = final_vit_res.scalar_one_or_none()
 
     return to_queue_entry_response(queue_entry, pay_stat, vitals_rec)
