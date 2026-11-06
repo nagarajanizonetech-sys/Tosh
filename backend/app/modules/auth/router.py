@@ -39,7 +39,6 @@ def set_refresh_cookie(response: Response, raw_refresh_token: str) -> None:
 @router.post(
     "/login",
     response_model=LoginResponse,
-    response_model_exclude_none=True,
     summary="Sign in staff user",
 )
 @limiter.limit("10/minute")

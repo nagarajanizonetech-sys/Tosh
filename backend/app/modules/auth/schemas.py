@@ -29,7 +29,6 @@ class RefreshRequest(CamelModel):
 class LoginResponse(CamelModel):
     access_token: str
     token_type: str = "bearer"
-    refresh_token: str | None = None
     user: UserPublic
 
 

@@ -22,8 +22,8 @@ class NoopProvider(NotificationProvider):
             provider_message_id=msg_id,
             message_preview=message[:50],
         )
-        # No-op provider does not confirm delivery; reminder remains Queued
-        return False, msg_id
+        # No-op provider does not confirm delivery; returns False and None
+        return False, None
 
 
 _notification_provider: NotificationProvider | None = None

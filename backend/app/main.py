@@ -228,14 +228,11 @@ async def websocket_endpoint(websocket: WebSocket):
         await ws_manager.disconnect(websocket)
 
 
-from app.db.session import async_session_factory
-
-
 @app.get("/ready", tags=["Health"], summary="Readiness Probe")
 async def readiness():
     try:
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
         return {"status": "ready", "database": "connected"}
     except Exception as e:  # noqa: BLE001
         logger.error("readiness_check_failed", error=str(e))
