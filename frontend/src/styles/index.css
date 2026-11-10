@@ -716,7 +716,7 @@ a:focus:not(:focus-visible) {
   align-items: center;
   gap: 9px;
   height: 36px;
-  padding: 0 10px 0 6px;
+  padding: 0 12px 0 6px;
   border: 1px solid var(--line);
   background: #FFFFFF;
   border-radius: 9999px;

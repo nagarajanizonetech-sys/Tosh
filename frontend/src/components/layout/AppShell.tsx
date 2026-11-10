@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Bone, CalendarClock, CalendarDays, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Clock3, CreditCard, FileBarChart2, History, LayoutDashboard, LogOut, Menu, MessageCircle, Search, Settings, Stethoscope, UserRound, Users, X } from 'lucide-react';
+import { Bell, Bone, CalendarClock, CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, CreditCard, FileBarChart2, History, LayoutDashboard, LogOut, Menu, MessageCircle, Search, Settings, Stethoscope, UserRound, Users, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { timeLabel, dateLabel } from '../../utils/format';
 import { WhatsAppIcon } from '../ui/Icons';
@@ -591,7 +591,6 @@ export function AppShell() {
               <strong>{info.name}</strong>
               <span>{mode === 'mock' ? 'Demo workspace' : 'API mode'}</span>
             </div>
-            <ChevronDown size={13} color="#64748B" />
           </div>
           <button className="icon-button topbar-logout-btn mobile-logout" type="button" aria-label="Log out" title="Log out" onClick={signOut}>
             <LogOut size={16} />

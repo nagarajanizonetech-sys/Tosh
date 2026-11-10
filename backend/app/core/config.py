@@ -75,7 +75,6 @@ DEFAULT_CORS_ORIGINS: list[str] = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "https://tosh-drev-henna.vercel.app",
 ]
 
 
@@ -133,8 +132,6 @@ class Settings(BaseSettings):
         if not origins:
             return list(DEFAULT_CORS_ORIGINS)
 
-        if "https://tosh-drev-henna.vercel.app" not in origins:
-            origins.append("https://tosh-drev-henna.vercel.app")
         return origins
 
     # Database URLs (loaded directly from .env without hardcoded defaults)
@@ -235,10 +232,10 @@ class Settings(BaseSettings):
         return "change-this-to-a-very-secure-random-secret-key-in-production"
     JWT_ALGORITHM: str = Field(default_factory=lambda: os.getenv("JWT_ALGORITHM", "HS256"))
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+        default_factory=lambda: int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
     )
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(
-        default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+        default_factory=lambda: int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "30"))
     )
 
     # Staff Initial Passwords (loaded from .env)

@@ -19,7 +19,7 @@ class WebSocketClient {
   private reconnectTimer: any = null;
   private pingTimer: any = null;
   private reconnectAttempts = 0;
-  private maxReconnectDelay = 10000;
+  private maxReconnectDelay = 30000;
   private isIntentionallyClosed = false;
 
   private resolveUrl(): string {
@@ -31,22 +31,27 @@ class WebSocketClient {
       return 'ws://127.0.0.1:8000/api/v1/ws';
     }
 
+    let baseWs = '';
     if (API_BASE_URL && (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://'))) {
       const wsProto = API_BASE_URL.startsWith('https://') ? 'wss://' : 'ws://';
       const cleanBase = API_BASE_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-      if (cleanBase.endsWith('/ws')) {
-        return `${wsProto}${cleanBase}`;
-      }
-      return `${wsProto}${cleanBase}/ws`;
+      baseWs = `${wsProto}${cleanBase}`;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
+      const relativeBase = (API_BASE_URL || '/api/v1').replace(/\/+$/, '');
+      baseWs = `${protocol}//${host}${relativeBase}`;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host; // e.g. "localhost:3000" or "192.168.29.38:3000"
-    const relativeBase = (API_BASE_URL || '/api/v1').replace(/\/+$/, '');
-    if (relativeBase.endsWith('/ws')) {
-      return `${protocol}//${host}${relativeBase}`;
+    if (baseWs.endsWith('/ws')) {
+      return baseWs;
     }
-    return `${protocol}//${host}${relativeBase}/ws`;
+
+    // Alternate between /api/v1/ws and root /ws on retries in case proxy handles /ws directly
+    if (this.reconnectAttempts > 0 && this.reconnectAttempts % 2 === 1 && baseWs.includes('/api/v1')) {
+      return baseWs.replace(/\/api\/v1\/?$/, '/ws');
+    }
+    return `${baseWs}/ws`;
   }
 
   public connect(): void {
@@ -159,7 +164,12 @@ class WebSocketClient {
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.isIntentionallyClosed) return;
     this.reconnectAttempts += 1;
-    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), this.maxReconnectDelay);
+    if (this.reconnectAttempts === 4) {
+      console.warn(
+        '[WebSocket] Real-time connection to backend failed. The application will continue functioning normally using REST API polling. If this is a production server, ensure your reverse proxy (e.g. Nginx) has WebSocket upgrade headers enabled.'
+      );
+    }
+    const delay = Math.min(2000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 8)), this.maxReconnectDelay);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();

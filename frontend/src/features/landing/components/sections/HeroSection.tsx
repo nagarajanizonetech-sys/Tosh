@@ -87,7 +87,7 @@ export function HeroSection({ scroll }: { scroll: (id: string) => void }): React
                     src={art.ortho}
                     alt="AI-generated realistic orthopaedic editorial visual"
                     loading="eager"
-                    fetchPriority="high"
+                    {...{ fetchpriority: 'high' }}
                     decoding="async"
                   />
                   <span>JOINT HEALTH / 01</span>

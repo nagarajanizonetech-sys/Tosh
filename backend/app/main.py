@@ -145,10 +145,9 @@ async def security_and_request_id_middleware(request: Request, call_next):
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     if "/documents/" in request.url.path or request.url.path.startswith("/api/v1/documents"):
-        allowed_origins = " ".join(settings.CORS_ORIGINS) if settings.CORS_ORIGINS else "'self'"
-        response.headers["Content-Security-Policy"] = (
-            f"frame-ancestors 'self' http://localhost:3000 http://localhost:5173 http://127.0.0.1:3000 http://127.0.0.1:5173 https://*.vercel.app https://tosh-drev-henna.vercel.app {allowed_origins}"
-        )
+        allowed_origins = " ".join(settings.CORS_ORIGINS) if settings.CORS_ORIGINS else ""
+        frame_sources = f"'self' {allowed_origins}".strip()
+        response.headers["Content-Security-Policy"] = f"frame-ancestors {frame_sources}"
         response.headers["Cross-Origin-Resource-Policy"] = "cross-origin"
     else:
         response.headers["X-Frame-Options"] = "DENY"
