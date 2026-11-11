@@ -143,6 +143,20 @@ export function ApiProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  // Graceful polling fallback when WebSocket is unavailable or disconnected
+  useEffect(() => {
+    if (!user || wsStatus === 'connected') return;
+
+    // Poll every 12s when tab is active to ensure clinic records stay fresh
+    const pollTimer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        fetchClinicDataRef.current();
+      }
+    }, 12000);
+
+    return () => clearInterval(pollTimer);
+  }, [user, wsStatus]);
+
   const repository = useMemo(() => {
     return {
       // Patients

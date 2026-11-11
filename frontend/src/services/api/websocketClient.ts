@@ -19,8 +19,23 @@ class WebSocketClient {
   private reconnectTimer: any = null;
   private pingTimer: any = null;
   private reconnectAttempts = 0;
-  private maxReconnectDelay = 30000;
+  private maxReconnectDelay = 60000;
   private isIntentionallyClosed = false;
+
+  constructor() {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (
+          document.visibilityState === 'visible' &&
+          this.status === 'disconnected' &&
+          !this.isIntentionallyClosed &&
+          !this.reconnectTimer
+        ) {
+          this.connect();
+        }
+      });
+    }
+  }
 
   private resolveUrl(): string {
     const customWs = import.meta.env.VITE_WS_URL;
@@ -164,12 +179,24 @@ class WebSocketClient {
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.isIntentionallyClosed) return;
     this.reconnectAttempts += 1;
+
     if (this.reconnectAttempts === 4) {
       console.warn(
         '[WebSocket] Real-time connection to backend failed. The application will continue functioning normally using REST API polling. If this is a production server, ensure your reverse proxy (e.g. Nginx) has WebSocket upgrade headers enabled.'
       );
     }
-    const delay = Math.min(2000 * Math.pow(1.5, Math.min(this.reconnectAttempts, 8)), this.maxReconnectDelay);
+
+    // Do not attempt background reconnections when tab is hidden
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+      return;
+    }
+
+    // Exponential backoff: 3s -> 4.5s -> 6.75s -> 10s -> 20s -> 45s -> 60s max
+    const delay =
+      this.reconnectAttempts >= 5
+        ? this.maxReconnectDelay
+        : Math.min(2000 * Math.pow(1.5, this.reconnectAttempts), 30000);
+
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
